@@ -10,9 +10,9 @@ The agent runs entirely on Dartmouth's Discovery HPC cluster. No data ever leave
 
 ## Team
 
-- Varun Kalidindi (Lead Developer)
+- Varun Kalidindi (Developer)
 - Nehan Mohammed (Developer)
-- Avilash Angirekula (Developer)
+- Avilash Angirekula (Mentor)
 - Zarif Azher (Faculty Mentor)
 
 ## Tech Stack
