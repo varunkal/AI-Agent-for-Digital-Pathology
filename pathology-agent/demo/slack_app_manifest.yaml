@@ -1,0 +1,25 @@
+display_information:
+  name: LevyBoy
+  description: Lab-personalized research assistant for the Levy Lab
+  background_color: "#2c2d30"
+features:
+  bot_user:
+    display_name: LevyBoy
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - chat:write
+      - im:history
+      - im:read
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.im
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

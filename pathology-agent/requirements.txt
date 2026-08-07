@@ -1,0 +1,21 @@
+# Runtime dependencies for the agent + RAG pipeline.
+# The repo currently has no dependency file, so a fresh clone cannot be set up
+# without reading the code. These are the packages lab_rag.py imports.
+
+chromadb>=0.5          # persistent vector store (collection "levy_lab")
+ollama>=0.3            # Python client for the local Ollama server
+
+# Models are pulled through Ollama, not pip:
+#   ollama pull qwen3-coder        # ~18GB, the chat/agent model (needs tool calling)
+#   ollama pull nomic-embed-text   # embedding model
+#
+# Note: Qwen2.5-Coder does NOT work with qwen-code's tool calling (it emits JSON
+# instead of executing). Qwen3-Coder is required. See Planning doc, Day 3.
+
+# The agent framework itself is a Node package, installed separately:
+#   npm install -g @qwen-code/qwen-code    # v0.19.4
+
+# --- Evaluation harness ---
+# evaluation/ deliberately uses only the standard library, so nothing is needed
+# to score results. Tests need pytest:
+pytest>=7.0

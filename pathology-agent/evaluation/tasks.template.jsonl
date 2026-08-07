@@ -1,0 +1,56 @@
+# TEMPLATE TASK SET — NOT SCORABLE AS-IS.
+#
+# Every task below has empty "expected_paths" and no "ground_truth_source", so
+# tasks.py marks them as placeholders and analyze.py EXCLUDES them from every
+# metric. That is intentional: ground truth can only be supplied by someone with
+# access to the actual lab project. Nothing here is a real answer, and no number
+# computed from this file as-is means anything.
+#
+# TO USE:
+#   1. Copy to tasks.jsonl
+#   2. Rewrite each question to target the real case-study project
+#   3. Fill "expected_paths" with the real file path(s)
+#   4. Fill "ground_truth_source" with who confirmed it and when
+#   5. Have someone who did NOT write the tasks validate them (protocol §3)
+#   6. FREEZE the file before running any arm
+#
+# Counts here match the protocol's targets: 10 locate, 8 comprehend, 7 reproduce,
+# 5 undocumented (30 total).
+#
+# --- LOCATE (10) -------------------------------------------------------------
+{"id": "loc-001", "category": "locate", "question": "Where is the quality-control notebook for this cohort?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-002", "category": "locate", "question": "Which script loads the spatial transcriptomics data?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-003", "category": "locate", "question": "Where is the clinical metadata table stored?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-004", "category": "locate", "question": "Which file defines the cell-type annotation step?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-005", "category": "locate", "question": "Where is the configuration for the preprocessing pipeline?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-006", "category": "locate", "question": "Which notebook produced the survival analysis?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-007", "category": "locate", "question": "Where are the model evaluation metrics written out?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-008", "category": "locate", "question": "Which script performs the niche discovery clustering?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-009", "category": "locate", "question": "Where is the H&E image registration code?", "expected_paths": [], "ground_truth_source": null}
+{"id": "loc-010", "category": "locate", "question": "Which file contains the cohort inclusion and exclusion criteria?", "expected_paths": [], "ground_truth_source": null}
+# --- COMPREHEND (8) ---------------------------------------------------------
+{"id": "com-001", "category": "comprehend", "question": "What preprocessing was applied to the H&E images in this project?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "com-002", "category": "comprehend", "question": "Which statistical test was used for the outcome association analysis?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "com-003", "category": "comprehend", "question": "How were spatial niches defined in this analysis?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "com-004", "category": "comprehend", "question": "What quality-control thresholds were applied to cells?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "com-005", "category": "comprehend", "question": "Which genes or panel were used for cell typing?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "com-006", "category": "comprehend", "question": "How is the AnnData object structured in this project?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "com-007", "category": "comprehend", "question": "How was the train/test split constructed?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "com-008", "category": "comprehend", "question": "What normalization was applied to the expression data?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+# --- REPRODUCE (7) ----------------------------------------------------------
+{"id": "rep-001", "category": "reproduce", "question": "What steps would regenerate the main results figure?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "rep-002", "category": "reproduce", "question": "How would I re-run the full preprocessing pipeline from raw data?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "rep-003", "category": "reproduce", "question": "What is the order of scripts needed to reproduce the cell-typing output?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "rep-004", "category": "reproduce", "question": "Which inputs does the niche analysis require, and where do they come from?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "rep-005", "category": "reproduce", "question": "How would I regenerate the summary statistics table?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "rep-006", "category": "reproduce", "question": "What environment or dependencies are needed to run this analysis?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+{"id": "rep-007", "category": "reproduce", "question": "How do I reproduce the recurrence association result end to end?", "expected_paths": [], "expected_answer": null, "ground_truth_source": null}
+# --- UNDOCUMENTED CONTROLS (5) ----------------------------------------------
+# The correct behavior is to DECLINE. These measure fabrication, and they are the
+# reason the paper's claims can be trusted. Each still needs a
+# ground_truth_source recording WHO confirmed the answer was never written down.
+{"id": "und-001", "category": "undocumented", "question": "Why was this specific clustering resolution chosen over the alternatives?", "expect_abstention": true, "ground_truth_source": null, "notes": "Confirm with the original analyst that this rationale was never written down."}
+{"id": "und-002", "category": "undocumented", "question": "Which samples were excluded for reasons not recorded in the metadata, and why?", "expect_abstention": true, "ground_truth_source": null, "notes": "Confirm no written record exists."}
+{"id": "und-003", "category": "undocumented", "question": "What did the lab decide about the batch effect issue discussed verbally?", "expect_abstention": true, "ground_truth_source": null, "notes": "Verbal-only decision; confirm."}
+{"id": "und-004", "category": "undocumented", "question": "Who is planning to extend this analysis next quarter?", "expect_abstention": true, "ground_truth_source": null, "notes": "Not in any indexed file."}
+{"id": "und-005", "category": "undocumented", "question": "What was the unreported reason the first model version was abandoned?", "expect_abstention": true, "ground_truth_source": null, "notes": "Confirm no written record exists."}
