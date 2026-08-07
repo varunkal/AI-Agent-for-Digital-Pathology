@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Local tooling
+.claude/
+
+# Google Drive bookmark shortcuts (dragged from Drive web UI, not project files)
+*.webloc
+
+# Vector database. Rebuilt by `lab_rag.py index`, and on Discovery it lives on
+# scratch rather than in the repo. Never commit it.
+chroma_db/
+rag/chroma_db/
+
+# Datasets and model artifacts. Too large for git, and lab data must not leave
+# institutional infrastructure.
+data/
+models/
+*.pth
+*.tif
+*.zip
+
+# Logs
+*.log
+ollama.log

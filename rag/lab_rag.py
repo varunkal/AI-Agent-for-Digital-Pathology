@@ -7,8 +7,15 @@ then answers questions using retrieved context + Qwen3-Coder via Ollama.
 
 Usage:
   python lab_rag.py index /path/to/lab/project/folder
+  python lab_rag.py index /path/to/folder --rebuild   (force full re-index)
   python lab_rag.py query "What preprocessing was used on the H&E images?"
   python lab_rag.py chat   (interactive mode)
+
+Environment:
+  LAB_RAG_CHROMA_DIR   Where the vector database lives. On Discovery this
+                       should be scratch, not home and not /dartfs/rc.
+  LAB_RAG_EXTENSIONS   Comma-separated file types to index, e.g. ".py,.ipynb".
+                       Defaults to the full set in DEFAULT_EXTENSIONS.
 """
 
 import os
@@ -19,19 +26,39 @@ import chromadb
 import ollama
 
 # === CONFIGURATION ===
-CHROMA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chroma_db")
+# Storage location for the vector database.
+# On Discovery, point this at scratch: /dartfs/rc is full and lab policy
+# prohibits storing data in home directories. Scratch gives 5TB per user but
+# purges files after 45 days, so anything durable needs a periodic copy.
+#   export LAB_RAG_CHROMA_DIR=/dartfs-hpc/scratch/$USER/levy_lab_index
+CHROMA_DIR = os.environ.get(
+    "LAB_RAG_CHROMA_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "chroma_db"),
+)
+
 COLLECTION_NAME = "levy_lab"
 EMBED_MODEL = "nomic-embed-text"    # Small embedding model (pulled via Ollama)
 CHAT_MODEL = "qwen3-coder"          # Main LLM for answering
 CHUNK_SIZE = 800                     # Characters per chunk
 CHUNK_OVERLAP = 100                  # Overlap between chunks
 TOP_K = 5                           # Number of chunks to retrieve per query
+EMBED_BATCH_SIZE = 50               # Chunks embedded per Ollama call
 
-# File types we can index
-INDEXABLE_EXTENSIONS = {
+# File types we can index. Override to narrow the corpus, e.g. code only:
+#   export LAB_RAG_EXTENSIONS=".py,.ipynb"
+DEFAULT_EXTENSIONS = {
     ".py", ".ipynb", ".md", ".txt", ".sh", ".yaml", ".yml",
     ".json", ".csv", ".tsv", ".r", ".R", ".cfg", ".conf", ".toml"
 }
+
+if os.environ.get("LAB_RAG_EXTENSIONS"):
+    INDEXABLE_EXTENSIONS = {
+        ext.strip() if ext.strip().startswith(".") else "." + ext.strip()
+        for ext in os.environ["LAB_RAG_EXTENSIONS"].split(",")
+        if ext.strip()
+    }
+else:
+    INDEXABLE_EXTENSIONS = set(DEFAULT_EXTENSIONS)
 
 
 # === FILE READING ===
@@ -111,7 +138,12 @@ def chunk_text(text, filepath, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
             chunk = chunk[:last_newline]
             end = start + last_newline
 
-        chunk_id = hashlib.md5(f"{filepath}:{start}".encode()).hexdigest()
+        # Hash includes the chunk text, not just position, so editing a file
+        # in place produces new IDs and forces a re-embed. Hashing only
+        # path+offset would silently keep stale content in the index.
+        chunk_id = hashlib.md5(
+            f"{filepath}:{start}:{chunk}".encode()
+        ).hexdigest()
 
         chunks.append({
             "id": chunk_id,
@@ -130,8 +162,34 @@ def chunk_text(text, filepath, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
 
 # === INDEXING ===
 
-def index_directory(directory):
-    """Walk a directory, read all indexable files, chunk them, embed, store."""
+def stored_ids_for_source(collection, source):
+    """Chunk IDs currently stored for one source file."""
+    try:
+        got = collection.get(where={"source": source}, include=[])
+    except Exception:
+        return set()
+    return set(got.get("ids") or [])
+
+
+def stored_sources(collection):
+    """Every source file currently represented in the collection."""
+    try:
+        got = collection.get(include=["metadatas"])
+    except Exception:
+        return set()
+    return {
+        m.get("source")
+        for m in (got.get("metadatas") or [])
+        if m and m.get("source")
+    }
+
+
+def index_directory(directory, rebuild=False):
+    """Walk a directory, read all indexable files, chunk them, embed, store.
+
+    Existing chunks are skipped unless `rebuild` is set, so re-indexing an
+    unchanged corpus costs nothing.
+    """
     directory = os.path.abspath(directory)
     print(f"\n=== Indexing: {directory} ===\n")
 
@@ -174,41 +232,85 @@ def index_directory(directory):
     # Initialize ChromaDB
     client = chromadb.PersistentClient(path=CHROMA_DIR)
 
-    # Delete existing collection if re-indexing
-    try:
-        client.delete_collection(COLLECTION_NAME)
-    except Exception:
-        pass
+    if rebuild:
+        try:
+            client.delete_collection(COLLECTION_NAME)
+            print("Rebuild requested: dropped existing collection.")
+        except Exception:
+            pass
 
-    collection = client.create_collection(
+    collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"}
     )
 
-    # Embed and store in batches
-    BATCH_SIZE = 50
-    for i in range(0, len(all_chunks), BATCH_SIZE):
-        batch = all_chunks[i:i + BATCH_SIZE]
-        texts = [c["text"] for c in batch]
-        ids = [c["id"] for c in batch]
-        metadatas = [c["metadata"] for c in batch]
+    # Reconcile per source file. Chunk IDs include content, so if a file's
+    # stored IDs exactly match its current ones it is unchanged and skipped.
+    # If they differ the file was edited, and its old chunks are dropped first
+    # so the update replaces stale content instead of sitting beside it.
+    by_source = {}
+    for c in all_chunks:
+        by_source.setdefault(c["metadata"]["source"], []).append(c)
 
-        # Get embeddings from Ollama
-        embeddings = []
-        for text in texts:
-            response = ollama.embed(model=EMBED_MODEL, input=text)
-            embeddings.append(response["embeddings"][0])
+    pending = []
+    unchanged, updated, added = 0, 0, 0
+    for source, chunks in by_source.items():
+        stored = stored_ids_for_source(collection, source)
+        current = {c["id"] for c in chunks}
+        if stored and stored == current:
+            unchanged += 1
+            continue
+        if stored:
+            collection.delete(ids=list(stored))
+            updated += 1
+        else:
+            added += 1
+        pending.extend(chunks)
+
+    # Drop files that vanished from the corpus, so the index never cites a
+    # file that no longer exists.
+    removed = stored_sources(collection) - set(by_source)
+    for source in removed:
+        collection.delete(where={"source": source})
+    if removed:
+        print(f"Removed {len(removed)} file(s) no longer in the corpus")
+
+    print(f"Files: {unchanged} unchanged, {updated} modified, {added} new")
+
+    if not pending:
+        print("\n=== Nothing to embed. Collection is up to date. ===")
+        print(f"Collection holds: {collection.count()} chunks")
+        print(f"Database stored at: {CHROMA_DIR}")
+        return
+
+    print(f"To embed: {len(pending)} chunks\n")
+
+    total_batches = (len(pending) - 1) // EMBED_BATCH_SIZE + 1
+    for i in range(0, len(pending), EMBED_BATCH_SIZE):
+        batch = pending[i:i + EMBED_BATCH_SIZE]
+        texts = [c["text"] for c in batch]
+
+        # One Ollama call for the whole batch. Embedding per chunk in a loop
+        # costs one HTTP round trip each and dominates indexing time.
+        response = ollama.embed(model=EMBED_MODEL, input=texts)
+        embeddings = response["embeddings"]
+
+        if len(embeddings) != len(texts):
+            raise RuntimeError(
+                f"Embedding count mismatch: sent {len(texts)}, got {len(embeddings)}"
+            )
 
         collection.add(
-            ids=ids,
+            ids=[c["id"] for c in batch],
             embeddings=embeddings,
             documents=texts,
-            metadatas=metadatas,
+            metadatas=[c["metadata"] for c in batch],
         )
 
-        print(f"  Indexed batch {i // BATCH_SIZE + 1}/{(len(all_chunks) - 1) // BATCH_SIZE + 1}")
+        print(f"  Indexed batch {i // EMBED_BATCH_SIZE + 1}/{total_batches}")
 
-    print(f"\n=== Done! {len(all_chunks)} chunks indexed into ChromaDB ===")
+    print(f"\n=== Done! {len(pending)} new chunks indexed into ChromaDB ===")
+    print(f"Collection now holds: {collection.count()} chunks")
     print(f"Database stored at: {CHROMA_DIR}")
 
 
@@ -307,8 +409,10 @@ if __name__ == "__main__":
     command = sys.argv[1]
 
     if command == "index":
-        if len(sys.argv) < 3:
-            print("Usage: python lab_rag.py index /path/to/directory")
+        args = [a for a in sys.argv[2:] if a != "--rebuild"]
+        rebuild = "--rebuild" in sys.argv[2:]
+        if not args:
+            print("Usage: python lab_rag.py index /path/to/directory [--rebuild]")
             sys.exit(1)
         # Pull embedding model if not already present
         print("Ensuring embedding model is available...")
@@ -316,7 +420,7 @@ if __name__ == "__main__":
             ollama.pull(EMBED_MODEL)
         except Exception:
             print(f"Warning: Could not pull {EMBED_MODEL}. Make sure Ollama is running.")
-        index_directory(sys.argv[2])
+        index_directory(args[0], rebuild=rebuild)
 
     elif command == "query":
         if len(sys.argv) < 3:
