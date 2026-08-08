@@ -12,10 +12,17 @@ Usage:
   python lab_rag.py chat   (interactive mode)
 
 Environment:
-  LAB_RAG_CHROMA_DIR   Where the vector database lives. On Discovery this
-                       should be scratch, not home and not /dartfs/rc.
-  LAB_RAG_EXTENSIONS   Comma-separated file types to index, e.g. ".py,.ipynb".
-                       Defaults to the full set in DEFAULT_EXTENSIONS.
+  LAB_RAG_CHROMA_DIR      Where the vector database lives. On Discovery this
+                          should be scratch, not home and not /dartfs/rc.
+  LAB_RAG_EXTENSIONS      Comma-separated file types to index, e.g. ".py,.ipynb".
+                          Defaults to the full set in DEFAULT_EXTENSIONS.
+  LAB_RAG_SKIP_DIRS       Extra directory names never descended into.
+  LAB_RAG_MAX_DIR_ENTRIES Directories larger than this are skipped whole
+                          (default 5000), so dataset folders do not dominate
+                          index time.
+  LAB_RAG_EMBED_HOST      Ollama endpoint for embeddings. Point at a CPU-only
+                          instance so the chat model stays GPU-resident.
+  LAB_RAG_CHAT_HOST       Ollama endpoint for generation. Defaults to local.
 """
 
 import os
@@ -59,6 +66,42 @@ if os.environ.get("LAB_RAG_EXTENSIONS"):
     }
 else:
     INDEXABLE_EXTENSIONS = set(DEFAULT_EXTENSIONS)
+
+# Directories never descended into. Add project-specific ones with:
+#   export LAB_RAG_SKIP_DIRS="data,checkpoints"
+DEFAULT_SKIP_DIRS = {
+    "__pycache__", "node_modules", ".git", ".ipynb_checkpoints",
+    ".venv", "venv", "site-packages", "chroma_db",
+}
+SKIP_DIRS = set(DEFAULT_SKIP_DIRS)
+if os.environ.get("LAB_RAG_SKIP_DIRS"):
+    SKIP_DIRS |= {
+        d.strip() for d in os.environ["LAB_RAG_SKIP_DIRS"].split(",") if d.strip()
+    }
+
+# A directory holding more entries than this is skipped whole. Dataset folders
+# (the PCam corpus has ~150k images in one directory) otherwise dominate index
+# time: enumerating them costs ~26s per run to find nothing indexable.
+MAX_DIR_ENTRIES = int(os.environ.get("LAB_RAG_MAX_DIR_ENTRIES", "5000"))
+
+# Serving the embedding model and the chat model from one Ollama instance costs
+# a full model swap per query. Under exclusive-mode GPU allocation only one
+# model may be resident, so every question evicts the 18GB chat model to load
+# the embedder, then reloads it: measured at 118s for a cold query.
+#
+# Pointing embeddings at a second, CPU-only Ollama instance leaves the chat
+# model permanently resident on the GPU. Deliberately the *same* embedding
+# model, just on CPU, so vectors are unchanged and existing indexes stay valid.
+# A different embedding library would silently invalidate every stored vector.
+#
+#   export LAB_RAG_EMBED_HOST=http://localhost:11435
+EMBED_HOST = os.environ.get("LAB_RAG_EMBED_HOST")
+CHAT_HOST = os.environ.get("LAB_RAG_CHAT_HOST")
+
+# Falls back to the ollama module itself, so a single-server setup still works
+# unchanged and needs no configuration.
+embed_client = ollama.Client(host=EMBED_HOST) if EMBED_HOST else ollama
+chat_client = ollama.Client(host=CHAT_HOST) if CHAT_HOST else ollama
 
 
 # === FILE READING ===
@@ -162,6 +205,60 @@ def chunk_text(text, filepath, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
 
 # === INDEXING ===
 
+def collect_files(directory, skip_dirs=None, max_entries=None):
+    """Find indexable files, without enumerating dataset directories.
+
+    Returns (files, skipped). A directory holding more than `max_entries`
+    entries is skipped in full rather than read partially, so a run either
+    indexes a directory or does not: no half-indexed corpus, which would make
+    results irreproducible. Enumeration stops as soon as the limit is crossed,
+    so a 150k-file image folder costs about `max_entries` stats, not 150k.
+
+    Symlinks are not followed, which avoids loops and stops a link inside the
+    corpus from pulling in files outside it.
+    """
+    skip_dirs = SKIP_DIRS if skip_dirs is None else skip_dirs
+    max_entries = MAX_DIR_ENTRIES if max_entries is None else max_entries
+
+    files, skipped, stack = [], [], [directory]
+
+    while stack:
+        current = stack.pop()
+        found, subdirs, count, overflow = [], [], 0, False
+
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    count += 1
+                    if count > max_entries:
+                        overflow = True
+                        break
+                    if entry.name.startswith("."):
+                        continue
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            if entry.name not in skip_dirs:
+                                subdirs.append(entry.path)
+                        elif entry.is_file(follow_symlinks=False):
+                            ext = os.path.splitext(entry.name)[1].lower()
+                            if ext in INDEXABLE_EXTENSIONS:
+                                found.append(entry.path)
+                    except OSError:
+                        continue
+        except OSError as exc:
+            print(f"  Warning: could not read {current}: {exc}")
+            continue
+
+        if overflow:
+            skipped.append(current)
+            continue
+
+        files.extend(found)
+        stack.extend(subdirs)
+
+    return files, skipped
+
+
 def stored_ids_for_source(collection, source):
     """Chunk IDs currently stored for one source file."""
     try:
@@ -193,17 +290,13 @@ def index_directory(directory, rebuild=False):
     directory = os.path.abspath(directory)
     print(f"\n=== Indexing: {directory} ===\n")
 
-    # Collect all files
-    all_files = []
-    for root, dirs, files in os.walk(directory):
-        # Skip hidden dirs and common junk
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in
-                   {"__pycache__", "node_modules", ".git", ".ipynb_checkpoints"}]
+    all_files, skipped_dirs = collect_files(directory)
 
-        for fname in files:
-            ext = os.path.splitext(fname)[1].lower()
-            if ext in INDEXABLE_EXTENSIONS:
-                all_files.append(os.path.join(root, fname))
+    for path in skipped_dirs:
+        print(
+            f"  Skipped {os.path.relpath(path, directory)}: over {MAX_DIR_ENTRIES} "
+            f"entries. Raise LAB_RAG_MAX_DIR_ENTRIES to index it anyway."
+        )
 
     print(f"Found {len(all_files)} indexable files.\n")
 
@@ -292,7 +385,7 @@ def index_directory(directory, rebuild=False):
 
         # One Ollama call for the whole batch. Embedding per chunk in a loop
         # costs one HTTP round trip each and dominates indexing time.
-        response = ollama.embed(model=EMBED_MODEL, input=texts)
+        response = embed_client.embed(model=EMBED_MODEL, input=texts)
         embeddings = response["embeddings"]
 
         if len(embeddings) != len(texts):
@@ -328,7 +421,7 @@ def query(question, verbose=True):
         return ""
 
     # Embed the question
-    q_embed = ollama.embed(model=EMBED_MODEL, input=question)["embeddings"][0]
+    q_embed = embed_client.embed(model=EMBED_MODEL, input=question)["embeddings"][0]
 
     # Retrieve top-K similar chunks
     results = collection.query(
@@ -363,7 +456,7 @@ QUESTION: {question}
 ANSWER:"""
 
     # Send to Qwen3-Coder
-    response = ollama.chat(
+    response = chat_client.chat(
         model=CHAT_MODEL,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -417,7 +510,7 @@ if __name__ == "__main__":
         # Pull embedding model if not already present
         print("Ensuring embedding model is available...")
         try:
-            ollama.pull(EMBED_MODEL)
+            embed_client.pull(EMBED_MODEL)
         except Exception:
             print(f"Warning: Could not pull {EMBED_MODEL}. Make sure Ollama is running.")
         index_directory(args[0], rebuild=rebuild)

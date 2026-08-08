@@ -152,5 +152,43 @@ L.index_directory(work, rebuild=True)
 assert sum(ollama.embed_calls) == coll().count()
 print(f"OK: re-embedded all {sum(ollama.embed_calls)} chunks\n")
 
+print("=== 7: oversized directory is skipped whole, not partially ===")
+big = os.path.join(work, "dataset")
+os.makedirs(big, exist_ok=True)
+for i in range(120):
+    open(os.path.join(big, f"img_{i}.tif"), "w").close()
+open(os.path.join(big, "notes.py"), "w").write("x = 1\n")
+
+files, skipped = L.collect_files(work, max_entries=50)
+assert big in skipped, "oversized directory was not skipped"
+assert not any("dataset" in f for f in files), \
+    "PARTIAL INDEX: some files from an oversized directory were included"
+print(f"OK: skipped {os.path.basename(big)} entirely, indexed {len(files)} elsewhere\n")
+
+print("=== 8: raising the limit indexes it ===")
+files, skipped = L.collect_files(work, max_entries=5000)
+assert skipped == [], f"unexpectedly skipped {skipped}"
+assert any(f.endswith("notes.py") for f in files), "notes.py not picked up"
+print(f"OK: with a higher limit, {len(files)} files found\n")
+
+print("=== 9: named directories are never descended into ===")
+files, _ = L.collect_files(work, skip_dirs={"dataset"}, max_entries=5000)
+assert not any("dataset" in f for f in files), "skip_dirs was ignored"
+print("OK: skip_dirs respected\n")
+
+print("=== 10: symlinks are not followed out of the corpus ===")
+outside = tempfile.mkdtemp()
+with open(os.path.join(outside, "secret.py"), "w") as f:
+    f.write("password = 'leaked'\n")
+link = os.path.join(work, "link_out")
+try:
+    os.symlink(outside, link)
+    files, _ = L.collect_files(work, max_entries=5000)
+    assert not any("secret.py" in f for f in files), \
+        "SYMLINK ESCAPE: followed a link outside the corpus"
+    print("OK: symlink to an outside directory not followed\n")
+finally:
+    shutil.rmtree(outside, ignore_errors=True)
+
 shutil.rmtree(work)
 print("ALL CHECKS PASSED")
