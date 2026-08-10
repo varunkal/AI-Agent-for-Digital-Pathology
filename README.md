@@ -17,7 +17,7 @@ The agent runs entirely on Dartmouth's Discovery HPC cluster. No data ever leave
 
 ## Tech Stack
 
-- LLM: Qwen3-Coder (open-source, 18GB) served via Ollama
+- LLM: Qwen3-Coder, 30.5B parameters (MoE), Q4_K_M quantized to 18.6GB, served via Ollama
 - Agent Framework: qwen-code v0.19.4
 - Runtime: Ollama on Discovery HPC (V100 GPUs)
 - RAG (planned): ChromaDB + LlamaIndex

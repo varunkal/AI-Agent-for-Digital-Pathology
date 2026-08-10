@@ -13,7 +13,7 @@ Locally-hosted AI agent on Dartmouth's Discovery HPC that indexes the Levy Lab's
 
 ## Tech stack (installed & working)
 
-- LLM: **Qwen3-Coder** (18GB) via **Ollama v0.30.9** — only this model works with qwen-code tool-calling; Qwen2.5-Coder outputs JSON instead of executing tools
+- LLM: **Qwen3-Coder**, 30.5B parameters (Mixture of Experts, `qwen3moe`), Q4_K_M quantized to **18.6GB** on disk, via **Ollama v0.30.9**. Note: 30.5B is the parameter count, 18.6GB is the file size. They are different numbers and the model has never been "18B". Only this model works with qwen-code tool-calling; Qwen2.5-Coder outputs JSON instead of executing tools
 - Agent framework: **qwen-code v0.19.4** (npm global install)
 - RAG: **ChromaDB 1.5.9** + **nomic-embed-text** embeddings
 - Python 3.11 via Conda, env name **`labagent`**
