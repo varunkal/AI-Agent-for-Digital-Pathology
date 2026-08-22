@@ -1,0 +1,56 @@
+# PanCyto retrieval task set (30 tasks)
+#
+# CORPUS: /dartfs/rc/nosnapshots/V/VaickusL-nb/EDIT_Interns_2026/projects/PanCyto
+#   Indexed:  scripts/ configs/ notebooks/   (.py .ipynb .yaml .sh .sbatch)
+#   Excluded: corpus/ eval/ runs/ extraction/ compare*/ test_slides/ third_party/
+#
+#   Why those exclusions:
+#     - eval/train_files.txt and eval/eval_holdout_slides.txt are slide-ID lists.
+#       .txt is in the indexer's default extension set, so indexing them would put
+#       patient identifiers into the vector store.
+#     - compare*/ filenames (469506_RGB.png etc.) look like accession numbers, and
+#       chunk_text() stamps the file path into every chunk, so paths leak too.
+#     - runs/*/config.yaml are near-duplicate snapshots of configs/*.yaml. Including
+#       them would make several comprehend answers ambiguous across 7 files.
+#
+# GROUND TRUTH STATUS: DRAFT, NOT YET HUMAN-VERIFIED.
+#   comprehend/* values were read directly out of the files and are high confidence.
+#   locate/* answers derive from each script's own docstring.
+#   undocumented/* were verified absent by grep across scripts/ configs/ notebooks/
+#     (checked: consent, journal, "submitted to", "patient age", demographic,
+#      institution, hospital, funding -> 0 files each).
+#     NOTE: IRB, protocol, kappa, and cost DO appear in the corpus and were
+#     rejected as controls for that reason.
+#
+#   Before any result is reported, ground_truth_source must be updated to name the
+#   human who confirmed each item. Aaditya (PanCyto owner) should review locate/*.
+{"id": "loc-001", "category": "locate", "question": "which script runs the linear probe?", "expected_paths": ["scripts/linear_probe.py"], "answer_note": "slide-grouped linear probe on saved features, CPU only", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-002", "category": "locate", "question": "where are the thyroid-specific extraction parameters kept?", "expected_paths": ["scripts/thyroid_config.py"], "answer_note": "thyroid-tuned CONFIG block for extract_cyto_objects.py", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-005", "category": "locate", "question": "where do we check whether the DINO head is dead?", "expected_paths": ["scripts/inspect_dino_head.py"], "answer_note": "docstring: 'is the DINO head dead, or is the config off?'", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-006", "category": "locate", "question": "which script prints the contingency table behind the ARI and NMI numbers?", "expected_paths": ["scripts/diagnose_metrics.py"], "answer_note": "also correlates PC1 against crop geometry", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-007", "category": "locate", "question": "what proves a checkpoint is actually trainable before we spend GPU hours on it?", "expected_paths": ["scripts/verify_full_ckpt.py"], "answer_note": "docstring states this exact purpose", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-008", "category": "locate", "question": "where do we measure per-channel mean and standard deviation on the training crops?", "expected_paths": ["scripts/set_rgb_stats.py"], "answer_note": "writes them into the config's rgb_mean / rgb_std", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-009", "category": "locate", "question": "which script runs RGB connected-components head to head against YOLO v6?", "expected_paths": ["scripts/compare_detectors.py"], "answer_note": "same downstream QC fed by both detectors", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-010", "category": "locate", "question": "how do we decide whether two slide-grouped probe scores actually differ?", "expected_paths": ["scripts/compare_probes.py"], "answer_note": "significance test between two probe scores", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-011", "category": "locate", "question": "where do we verify that test_object_type.csv agrees with the manifests?", "expected_paths": ["scripts/check_label_alignment.py"], "answer_note": "docstring states this exact purpose", "ground_truth_source": "DRAFT - unverified"}
+{"id": "loc-012", "category": "locate", "question": "which script completes a backbone-only checkpoint so the strict training loader accepts it?", "expected_paths": ["scripts/extend_ckpt_with_heads.py"], "answer_note": "strict loading raises on missing head keys without this", "ground_truth_source": "DRAFT - unverified"}
+{"id": "com-001", "category": "comprehend", "question": "what batch size per GPU is used for cervical training?", "expected_paths": ["configs/cervical_finetune_vitb16.yaml", "configs/cervical_smoke_vits8.yaml"], "answer_note": "128", "ground_truth_source": "DRAFT - read from file"}
+{"id": "com-002", "category": "comprehend", "question": "why does this project use float32 instead of bfloat16?", "expected_paths": ["configs/cervical_finetune_vitb16.yaml", "configs/cervical_smoke_vits8.yaml"], "answer_note": "V100 / Volta has no bf16 support", "ground_truth_source": "DRAFT - read from file"}
+{"id": "com-003", "category": "comprehend", "question": "what macro-F1 did the frozen pretrained baseline reach?", "expected_paths": ["configs/cervical_finetune_vitb16.yaml"], "answer_note": "0.775", "ground_truth_source": "DRAFT - read from file"}
+{"id": "com-005", "category": "comprehend", "question": "what is OFFICIAL_EPOCH_LENGTH set to, and why is it not one pass over the data?", "expected_paths": ["configs/cervical_finetune_vitb16.yaml", "configs/cervical_smoke_vits8.yaml"], "answer_note": "500; it is a schedule unit, the sampler is infinite. One real epoch of the 120k pool would be 937", "ground_truth_source": "DRAFT - read from file"}
+{"id": "com-006", "category": "comprehend", "question": "how large is a single thyroid follicular cell in microns?", "expected_paths": ["scripts/thyroid_config.py"], "answer_note": "10-15 um diameter", "ground_truth_source": "DRAFT - read from file"}
+{"id": "com-007", "category": "comprehend", "question": "why is thyroid detection cluster-first rather than single-cell?", "expected_paths": ["scripts/thyroid_config.py"], "answer_note": "at L1 a follicular cell is 77-174 px^2, at or below the cervical debris floor of 120 px^2, so single cells are indistinguishable from noise", "ground_truth_source": "DRAFT - read from file"}
+{"id": "com-009", "category": "comprehend", "question": "how many storage tokens does the student model use, and what breaks at the default?", "expected_paths": ["configs/cervical_finetune_vitb16.yaml", "configs/cervical_smoke_vits8.yaml"], "answer_note": "4; default of 0 drops register_tokens and orphans pretrained tensors", "ground_truth_source": "DRAFT - read from file"}
+{"id": "com-010", "category": "comprehend", "question": "what learning rate is used for the ViT-B/16 finetune?", "expected_paths": ["configs/cervical_finetune_vitb16.yaml"], "answer_note": "3.0e-05, used as-is because the v1 builder does not apply optim.scaling_rule", "ground_truth_source": "DRAFT - read from file"}
+{"id": "rep-001", "category": "reproduce", "question": "how would I re-run the thyroid extraction as a SLURM job?", "expected_paths": ["scripts/run_thyroid_extraction.sbatch", "scripts/run_one_thyroid_slide.py"], "answer_note": "sbatch array driver plus the per-slide wrapper", "ground_truth_source": "DRAFT - unverified"}
+{"id": "rep-002", "category": "reproduce", "question": "what produces the TEST and FINETUNE crop lists?", "expected_paths": ["scripts/build_pi_splits.py"], "answer_note": "builds slide-disjoint splits for the baseline-first plan", "ground_truth_source": "DRAFT - unverified"}
+{"id": "rep-003", "category": "reproduce", "question": "how do I embed a file list and then cluster it using a backbone built from the research repo?", "expected_paths": ["scripts/embed_repo_backbone.py", "scripts/embed_and_cluster.py"], "answer_note": "repo-built backbone embedding, then PCA + KMeans", "ground_truth_source": "DRAFT - unverified"}
+{"id": "und-001", "category": "undocumented", "question": "how many patients consented to have their slides used in this study?", "expected_paths": [], "answer_note": "CONTROL. grep 'consent' -> 0 files. Correct behaviour is abstention.", "ground_truth_source": "DRAFT - verified absent by grep"}
+{"id": "und-002", "category": "undocumented", "question": "which journal is this work being submitted to?", "expected_paths": [], "answer_note": "CONTROL. grep 'journal' and 'submitted to' -> 0 files.", "ground_truth_source": "DRAFT - verified absent by grep"}
+{"id": "und-003", "category": "undocumented", "question": "what is the age distribution of patients in the cervical cohort?", "expected_paths": [], "answer_note": "CONTROL. grep 'patient age' and 'demographic' -> 0 files.", "ground_truth_source": "DRAFT - verified absent by grep"}
+{"id": "und-004", "category": "undocumented", "question": "which hospital did the thyroid FNA specimens come from?", "expected_paths": [], "answer_note": "CONTROL. grep 'institution' and 'hospital' -> 0 files.", "ground_truth_source": "DRAFT - verified absent by grep"}
+{"id": "und-005", "category": "undocumented", "question": "what funding source supported this project?", "expected_paths": [], "answer_note": "CONTROL. grep 'funding' -> 0 files. NOTE: 'grant' appears in 1 file, so the question is worded around funding source.", "ground_truth_source": "DRAFT - verified absent by grep"}
+{"id": "rep-004", "category": "reproduce", "question": "how do I download a DINOv3 backbone from HuggingFace and confirm it actually loads?", "expected_paths": ["scripts/fetch_dinov3_hf.py"], "answer_note": "docstring: download into a local directory, then VERIFY it loads", "ground_truth_source": "DRAFT - docstring verified"}
+{"id": "rep-005", "category": "reproduce", "question": "what should I run to check the evaluation assets before spending any GPU time?", "expected_paths": ["scripts/check_eval_assets.py"], "answer_note": "docstring: answers the three questions that gate the cervical baseline", "ground_truth_source": "DRAFT - docstring verified"}
+{"id": "rep-006", "category": "reproduce", "question": "how do I pull a plain backbone state_dict out of a distributed checkpoint?", "expected_paths": ["scripts/extract_backbone_from_dcp.py"], "answer_note": "docstring states this exactly", "ground_truth_source": "DRAFT - docstring verified"}
+{"id": "rep-007", "category": "reproduce", "question": "how do I run the cervical extraction with YOLO as a batch job?", "expected_paths": ["scripts/run_cervical_extraction_yolo.sbatch"], "answer_note": "sbatch job for cervical YOLO extraction. NAME-BASED, not docstring-verified - confirm with Aaditya", "ground_truth_source": "DRAFT - NAME-BASED, needs owner confirmation"}
