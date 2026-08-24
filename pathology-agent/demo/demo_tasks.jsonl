@@ -1,0 +1,10 @@
+# DEMO task set. Answers are real for the SYNTHETIC corpus in demo/corpus/.
+# Not lab data. Exists to show the scoring machinery working.
+{"id": "loc-001", "category": "locate", "question": "where can I find the QC notebook for this cohort?", "expected_paths": ["notebooks/qc_cohortA.ipynb"], "ground_truth_source": "DEMO FIXTURE"}
+{"id": "loc-002", "category": "locate", "question": "which script performs the spatial niche discovery clustering?", "expected_paths": ["src/niche_discovery.py"], "ground_truth_source": "DEMO FIXTURE"}
+{"id": "loc-003", "category": "locate", "question": "where are the cohort inclusion and exclusion criteria?", "expected_paths": ["docs/cohort_criteria.md"], "ground_truth_source": "DEMO FIXTURE"}
+{"id": "com-001", "category": "comprehend", "question": "what normalization was applied to the expression data?", "expected_paths": ["src/preprocess.py"], "ground_truth_source": "DEMO FIXTURE"}
+{"id": "com-002", "category": "comprehend", "question": "which statistical test was used for the outcome association analysis?", "expected_paths": ["src/outcome_association.py"], "ground_truth_source": "DEMO FIXTURE"}
+{"id": "rep-001", "category": "reproduce", "question": "which notebook generates the recurrence figure?", "expected_paths": ["notebooks/figures_recurrence.ipynb"], "ground_truth_source": "DEMO FIXTURE"}
+{"id": "und-001", "category": "undocumented", "question": "why was leiden resolution 0.7 chosen over other values?", "expect_abstention": true, "ground_truth_source": "DEMO FIXTURE - rationale never written down"}
+{"id": "und-002", "category": "undocumented", "question": "who is planning to extend this analysis next quarter?", "expect_abstention": true, "ground_truth_source": "DEMO FIXTURE - not in any file"}

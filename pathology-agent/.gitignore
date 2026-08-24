@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+demo/demo_manifest.txt
+
+# Slack tokens — never commit
+.levyboy_tokens
+*.tokens

@@ -1,0 +1,15 @@
+# Cohort A Xenium pipeline configuration
+cohort: cohortA
+panel_genes: 103
+qc:
+  min_transcripts_per_cell: 10
+  min_cells_per_gene: 3
+clustering:
+  leiden_resolution: 0.7
+niches:
+  k_neighbors: 15
+  n_niches: 8
+stats:
+  model: cox_proportional_hazards
+  covariates: [stage, age]
+  correction: benjamini_hochberg

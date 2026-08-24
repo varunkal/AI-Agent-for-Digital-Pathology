@@ -1,0 +1,7 @@
+# SYNTHETIC TEST FIXTURE — not lab data, not a real task set.
+# Exists only to prove the run_eval -> analyze pipeline computes metrics.
+{"id": "loc-001", "category": "locate", "question": "Where is the QC notebook?", "expected_paths": ["notebooks/qc.ipynb"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "loc-002", "category": "locate", "question": "Which script loads the data?", "expected_paths": ["src/load.py"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "com-001", "category": "comprehend", "question": "What preprocessing was used?", "expected_paths": ["src/preprocess.py"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "rep-001", "category": "reproduce", "question": "How do I regenerate figure 3?", "expected_paths": ["notebooks/figures.ipynb"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "und-001", "category": "undocumented", "question": "Why was resolution 0.7 chosen?", "expect_abstention": true, "ground_truth_source": "SYNTHETIC FIXTURE"}
