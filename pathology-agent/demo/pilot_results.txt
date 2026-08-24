@@ -1,0 +1,47 @@
+==========================================================================
+PILOT  --  SYNTHETIC CORPUS, NOT REPORTABLE
+==========================================================================
+tasks=19   infrastructure errors: {'bm25': 0, 'agent': 0}
+
+--------------------------------------------------------------------------
+WHOLE-CHAIN recovery (all required files)
+--------------------------------------------------------------------------
+  bm25    single_file=7/7 (100%)   multi_file=3/8 (38%)
+  agent   single_file=7/7 (100%)   multi_file=3/8 (38%)
+  POOLED  discordant=4  bm25_only=2  agent_only=2  p=1.0
+  multi_file   discordant=4  bm25_only=2  agent_only=2  p=1.0  sig_attainable=False
+  single_file  discordant=0  bm25_only=0  agent_only=0  p=1.0  sig_attainable=False
+
+--------------------------------------------------------------------------
+ANY-FILE hit (the old, pooled outcome)
+--------------------------------------------------------------------------
+  bm25    single_file=7/7 (100%)   multi_file=6/8 (75%)
+  agent   single_file=7/7 (100%)   multi_file=8/8 (100%)
+  POOLED  discordant=2  bm25_only=0  agent_only=2  p=0.5
+  multi_file   discordant=2  bm25_only=0  agent_only=2  p=0.5  sig_attainable=False
+  single_file  discordant=0  bm25_only=0  agent_only=0  p=1.0  sig_attainable=False
+
+--------------------------------------------------------------------------
+ABSTENTION on unrecorded questions
+--------------------------------------------------------------------------
+  bm25    correct abstention 0/4
+  agent   correct abstention 3/4
+
+--------------------------------------------------------------------------
+PER-TASK, whole-chain
+--------------------------------------------------------------------------
+  sf-01   need=1  bm25=Y 1/1 prec=0.20 cand= 5   agent=Y 1/1 prec=0.20 cand= 5
+  sf-02   need=1  bm25=Y 1/1 prec=0.20 cand= 5   agent=Y 1/1 prec=0.20 cand= 5
+  sf-03   need=1  bm25=Y 1/1 prec=0.20 cand= 5   agent=Y 1/1 prec=0.20 cand= 5
+  sf-04   need=1  bm25=Y 1/1 prec=0.20 cand= 5   agent=Y 1/1 prec=0.25 cand= 4
+  sf-05   need=1  bm25=Y 1/1 prec=0.25 cand= 4   agent=Y 1/1 prec=0.20 cand= 5
+  sf-06   need=1  bm25=Y 1/1 prec=0.25 cand= 4   agent=Y 1/1 prec=0.25 cand= 4
+  sf-07   need=1  bm25=Y 1/1 prec=0.20 cand= 5   agent=Y 1/1 prec=0.33 cand= 3
+  mf-01   need=2  bm25=Y 2/2 prec=0.40 cand= 5   agent=n 1/2 prec=0.33 cand= 3
+  mf-02   need=2  bm25=Y 2/2 prec=0.40 cand= 5   agent=Y 2/2 prec=0.33 cand= 6
+  mf-03   need=3  bm25=n 2/3 prec=0.40 cand= 5   agent=Y 3/3 prec=0.38 cand= 8
+  mf-04   need=2  bm25=n 0/2 prec=0.00 cand= 5   agent=n 1/2 prec=0.17 cand= 6
+  mf-05   need=2  bm25=Y 2/2 prec=0.40 cand= 5   agent=n 1/2 prec=0.25 cand= 4
+  mf-06   need=2  bm25=n 1/2 prec=0.20 cand= 5   agent=n 1/2 prec=0.25 cand= 4
+  mf-07   need=2  bm25=n 1/2 prec=0.20 cand= 5   agent=Y 2/2 prec=0.25 cand= 8
+  mf-08   need=4  bm25=n 2/4 prec=0.40 cand= 5   agent=n 3/4 prec=0.75 cand= 4

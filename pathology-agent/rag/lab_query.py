@@ -254,6 +254,54 @@ def retrieve(
     ]
 
 
+
+def index_drift(corpus_root: str, *, collection=None) -> Dict[str, List[str]]:
+    """Compare what is indexed against what is on disk.
+
+    WHY THIS EXISTS
+    ---------------
+    A pilot run was silently invalidated by a stale index. Six files were added
+    to the corpus and the vector store was never rebuilt, so the keyword
+    baseline read fifteen files while the agent's semantic search could only see
+    nine. The agent then answered, correctly given what it could see, that "no
+    files in the corpus mention cohort B" -- for files sitting on disk. Nothing
+    anywhere reported a problem, and the comparison between the two arms was
+    meaningless.
+
+    Returns {"missing_from_index": [...], "missing_from_disk": [...]}. Empty
+    lists mean the index is current. Callers running an evaluation should treat
+    a non-empty result as fatal: no measurement taken against a drifted index
+    means anything.
+    """
+    import os
+
+    collection = collection if collection is not None else _default_collection()
+    got = collection.get(include=["metadatas"])
+    indexed = {
+        (m or {}).get("source")
+        for m in (got.get("metadatas") or [])
+        if (m or {}).get("source")
+    }
+
+    root = os.path.abspath(corpus_root)
+    on_disk = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames
+            if not d.startswith(".") and d not in {"__pycache__", "node_modules"}
+        ]
+        for name in filenames:
+            if name.startswith("."):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), root).replace(os.sep, "/")
+            on_disk.add(rel)
+
+    return {
+        "missing_from_index": sorted(on_disk - indexed),
+        "missing_from_disk": sorted(indexed - on_disk),
+    }
+
+
 # --- Abstention & citation analysis -----------------------------------------
 
 # Markers that indicate the model declined rather than fabricating. Feeds the
@@ -277,6 +325,23 @@ ABSTENTION_MARKERS = (
     "not specified in",
     "i don't know",
     "no relevant",
+    # Added after a pilot scored correct abstentions as failures. The agent's
+    # system prompt instructs it to answer "that is not written down in these
+    # files", and none of the markers above match that, so three genuine
+    # abstentions were counted as three hallucinations. A detector that does not
+    # recognise the phrasing its own prompt asks for measures nothing.
+    #
+    # Deliberately narrow. Each phrase asserts that a record is absent. Looser
+    # wording such as "does not specify" was considered and rejected: it appears
+    # inside answers that go on to guess, and a false positive here would score
+    # a fabrication as a correct refusal, which is the direction of error this
+    # project has to guard against hardest.
+    "not written down",
+    "not documented",
+    "not explicitly document",
+    "n't explicitly document",
+    "does not document",
+    "do not document",
 )
 
 

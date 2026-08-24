@@ -1137,8 +1137,16 @@ CORPUS = os.path.join(ROOT, "demo", "corpus")
 
 
 def test_bm25_indexes_the_corpus():
+    """Counts are derived from disk, not hardcoded. A literal here goes stale the
+    moment the corpus grows and then asserts nothing about correctness."""
     index = bm25.build_index(CORPUS)
-    assert index.n_docs == 9
+    on_disk = sum(
+        1
+        for dirpath, _dirs, files in os.walk(CORPUS)
+        for name in files
+        if os.path.splitext(name)[1].lower() in bm25.INDEXABLE_EXTENSIONS
+    )
+    assert index.n_docs == on_disk
     assert "notebooks/qc_cohortA.ipynb" in index.paths
     assert index.avg_length > 0
 
@@ -1156,11 +1164,36 @@ def test_bm25_finds_the_right_files():
     locate tasks, that is the honest finding and the paper must say so."""
     index = bm25.build_index(CORPUS)
     for question, expected in [
-        ("where can I find the QC notebook for this cohort?", "notebooks/qc_cohortA.ipynb"),
         ("which script performs the spatial niche discovery clustering?", "src/niche_discovery.py"),
         ("what normalization was applied to the expression data?", "src/preprocess.py"),
+        ("which statistical test was used for the outcome association analysis?",
+         "src/outcome_association.py"),
+        ("which notebook generates the recurrence figure?",
+         "notebooks/figures_recurrence.ipynb"),
     ]:
         assert index.search(question, top_k=5)[0] == expected
+
+
+def test_bm25_top_hit_degrades_when_the_cohort_is_unspecified():
+    """Recorded because it is a confound, not a win.
+
+    Once the corpus contains a second cohort, "the QC notebook for this cohort"
+    no longer has one lexical answer and the baseline's top hit moves to a
+    different cohort's config. Any later comparison must not read that as
+    evidence about multi-file reasoning: it is ambiguity, and the stratified
+    analysis is what keeps the two separable.
+    """
+    index = bm25.build_index(CORPUS)
+    for phrasing in (
+        "where can I find the QC notebook for this cohort?",
+        "where can I find the QC notebook for cohort A?",
+    ):
+        ranked = index.search(phrasing, top_k=5)
+        # Naming the cohort does not rescue it: the tokenizer splits "cohort A"
+        # into two terms and the filename carries "cohorta" as one, so the
+        # disambiguating word contributes nothing.
+        assert ranked[0] != "notebooks/qc_cohortA.ipynb"
+        assert "notebooks/qc_cohortA.ipynb" in ranked   # found, just not ranked first
 
 
 def test_bm25_record_matches_the_assistant_schema():
@@ -1199,8 +1232,9 @@ def test_bm25_is_scored_by_the_same_analyzer():
     """End-to-end: a BM25 record must flow through score_task unchanged."""
     index = bm25.build_index(CORPUS)
     task = tasks_mod.Task(
-        id="loc-001", category="locate", question="where is the QC notebook?",
-        expected_paths=["notebooks/qc_cohortA.ipynb"], ground_truth_source="FIXTURE",
+        id="loc-001", category="locate",
+        question="which script performs the spatial niche discovery clustering?",
+        expected_paths=["src/niche_discovery.py"], ground_truth_source="FIXTURE",
     )
     scored = analyze.score_task(task, bm25.answer_record(index, task.question), None)
     assert scored["hit_at_1"] is True
@@ -1874,3 +1908,187 @@ def test_clarification_detected_when_the_question_is_not_last():
         "Normalization is counts-per-cell to median then log1p. " * 6 + "Right?"
     )
     assert not lab_agent.is_clarifying_question("The answer is 0.7.")
+
+
+# =============================================================================
+# Stratified scoring: whole-chain recovery vs any-file
+# =============================================================================
+
+
+def _task(tid, paths, abstain=False):
+    return tasks_mod.Task(
+        id=tid, category="reproduce" if paths else "undocumented",
+        question="q", expected_paths=list(paths), expect_abstention=abstain,
+        ground_truth_source="FIXTURE",
+    )
+
+
+def test_stratum_is_derived_from_ground_truth():
+    """Derived, not declared, so it cannot drift from the expected paths."""
+    assert analyze.task_stratum(_task("a", ["one.py"])) == analyze.STRATUM_SINGLE
+    assert analyze.task_stratum(_task("b", ["one.py", "two.py"])) == analyze.STRATUM_MULTI
+    assert analyze.task_stratum(_task("c", [], abstain=True)) == analyze.STRATUM_UNRECORDED
+
+
+def test_any_file_and_whole_chain_disagree_on_a_partial_answer():
+    """The reason the pooled comparison hid the effect. An arm that finds one of
+    two required files scores identically to one that found both under the
+    any-file outcome, and differently under whole-chain."""
+    task = _task("mf", ["src/a.py", "config/b.yaml"])
+    partial = {"sources": ["src/a.py"], "cited_paths": [], "chunks": [{"source": "src/a.py"}]}
+    complete = {
+        "sources": ["src/a.py", "config/b.yaml"], "cited_paths": [],
+        "chunks": [{"source": "src/a.py"}, {"source": "config/b.yaml"}],
+    }
+    p = analyze.score_task(task, partial, None)
+    c = analyze.score_task(task, complete, None)
+
+    assert p["hit_at_budget"] is True and c["hit_at_budget"] is True      # indistinguishable
+    assert p["all_paths_identified"] is False                            # separable
+    assert c["all_paths_identified"] is True
+    assert (p["n_expected_found"], c["n_expected_found"]) == (1, 2)
+
+
+def test_whole_chain_is_not_truncated_by_a_rank_cutoff():
+    """Observed live and fixed: the agent answered "what is the full chain" with
+    the correct six-step pipeline in narrative order, and a three-candidate
+    cutoff scored it zero for two files it had actually named. A ranked list and
+    a narrative chain cannot share a rank cutoff."""
+    task = _task("mf", ["src/niche_discovery.py", "notebooks/figures_recurrence.ipynb"])
+    narrative = {
+        "sources": [],
+        "cited_paths": [
+            "data/raw.csv", "notebooks/qc.ipynb", "src/preprocess.py",
+            "src/cell_typing.py", "src/niche_discovery.py",
+            "results/niche_assignments.csv", "notebooks/figures_recurrence.ipynb",
+        ],
+        "chunks": [],
+    }
+    scored = analyze.score_task(task, narrative, None)
+    assert scored["all_paths_identified"] is True      # both named, at ranks 5 and 7
+    assert scored["n_expected_found"] == 2
+
+
+def test_precision_is_what_penalises_shotgunning():
+    """Recall alone would reward naming the whole corpus. Precision is reported
+    so that is visible rather than silently rescued by a rank cutoff."""
+    task = _task("mf", ["a.py", "b.py"])
+    focused = {"sources": ["a.py", "b.py"], "cited_paths": [], "chunks": []}
+    shotgun = {
+        "sources": ["a.py", "b.py"] + [f"noise{i}.py" for i in range(18)],
+        "cited_paths": [], "chunks": [],
+    }
+    f = analyze.score_task(task, focused, None)
+    g = analyze.score_task(task, shotgun, None)
+
+    assert f["all_paths_identified"] is True and g["all_paths_identified"] is True
+    assert f["chain_precision"] == 1.0
+    assert g["chain_precision"] == 0.1
+    assert g["n_candidates"] == 20
+
+
+def test_stratified_comparison_separates_what_pooling_hides():
+    """Two arms that tie overall but differ entirely within one stratum. Pooled,
+    this reads as no effect; that is the failure mode being guarded against."""
+    scored_a, scored_b = [], []
+    for i in range(4):                       # single-file: both arms correct
+        t = _task(f"sf{i}", ["one.py"])
+        rec = {"sources": ["one.py"], "cited_paths": [], "chunks": [{"source": "one.py"}]}
+        scored_a.append(analyze.score_task(t, rec, None))
+        scored_b.append(analyze.score_task(t, rec, None))
+    for i in range(6):                       # multi-file: only arm A finds both
+        t = _task(f"mf{i}", ["one.py", "two.py"])
+        full = {"sources": ["one.py", "two.py"], "cited_paths": [],
+                "chunks": [{"source": "one.py"}, {"source": "two.py"}]}
+        half = {"sources": ["one.py"], "cited_paths": [], "chunks": [{"source": "one.py"}]}
+        scored_a.append(analyze.score_task(t, full, None))
+        scored_b.append(analyze.score_task(t, half, None))
+
+    pooled = analyze.compare_arms(scored_a, scored_b, key="hit_at_budget")
+    assert pooled["n_discordant"] == 0        # invisible under any-file, pooled
+
+    by_stratum = analyze.compare_arms_by_stratum(scored_a, scored_b)
+    assert by_stratum[analyze.STRATUM_SINGLE]["n_discordant"] == 0
+    assert by_stratum[analyze.STRATUM_MULTI]["only_first"] == 6
+    assert by_stratum[analyze.STRATUM_MULTI]["significance_attainable"] is True
+    assert by_stratum[analyze.STRATUM_MULTI]["mcnemar_exact_p"] < 0.05
+
+
+def test_stratum_rates_exclude_infrastructure_errors():
+    t = _task("mf", ["a.py", "b.py"])
+    good = analyze.score_task(t, {"sources": ["a.py", "b.py"], "cited_paths": [],
+                                  "chunks": [{"source": "a.py"}, {"source": "b.py"}]}, None)
+    crashed = analyze.score_task(_task("mf2", ["a.py", "b.py"]), {"error": "timeout"}, None)
+    rates = analyze.stratum_rates([good, crashed])
+    assert rates[analyze.STRATUM_MULTI]["n"] == 1        # the crash is not a miss
+    assert rates[analyze.STRATUM_MULTI]["rate"] == 1.0
+
+
+# =============================================================================
+# Guards for two bugs that silently invalidated a pilot run
+# =============================================================================
+
+
+class _FakeCollection:
+    def __init__(self, sources):
+        self._sources = list(sources)
+
+    def get(self, include=None):
+        return {"metadatas": [{"source": s} for s in self._sources]}
+
+
+def test_index_drift_catches_a_stale_index():
+    """The bug: six files were added to the corpus and the vector store was not
+    rebuilt, so the keyword arm read fifteen files and the agent's search saw
+    nine. The agent then reported that files sitting on disk did not exist, and
+    nothing anywhere flagged it."""
+    with tempfile.TemporaryDirectory() as root:
+        os.makedirs(os.path.join(root, "src"))
+        for rel in ("src/a.py", "src/b.py", "notes.md"):
+            open(os.path.join(root, rel), "w").write("x")
+
+        current = lab_query.index_drift(root, collection=_FakeCollection(
+            ["src/a.py", "src/b.py", "notes.md"]))
+        assert current == {"missing_from_index": [], "missing_from_disk": []}
+
+        stale = lab_query.index_drift(root, collection=_FakeCollection(["src/a.py"]))
+        assert stale["missing_from_index"] == ["notes.md", "src/b.py"]
+        assert stale["missing_from_disk"] == []
+
+        deleted = lab_query.index_drift(root, collection=_FakeCollection(
+            ["src/a.py", "src/b.py", "notes.md", "gone.py"]))
+        assert deleted["missing_from_disk"] == ["gone.py"]
+
+
+def test_abstention_markers_match_the_phrasing_the_prompt_asks_for():
+    """The bug: the agent's system prompt instructs it to say "that is not
+    written down in these files", and no marker matched that, so three genuine
+    abstentions scored as three hallucinations. A detector that cannot recognise
+    the phrasing its own prompt requests measures nothing."""
+    for answer in (
+        "That is not written down in these files.",
+        "The lab's files don't explicitly document why resolution 0.7 was chosen.",
+        "This is not documented anywhere in the corpus.",
+    ):
+        assert lab_query.detect_abstention(answer), answer
+
+    # Must NOT fire on an answer that goes on to guess. Scoring a fabrication as
+    # a correct refusal is the direction of error that matters most here.
+    fabrication = (
+        "Cohort A does not adjust for sex because their inclusion criteria do "
+        "not require sex data collection."
+    )
+    assert not lab_query.detect_abstention(fabrication)
+
+
+def test_the_agent_prompt_and_the_detector_agree():
+    """Structural check, so the two cannot drift apart again: the phrase the
+    system prompt tells the model to use must be one the detector recognises."""
+    import lab_agent
+    import re
+
+    # Whitespace-normalised: the prompt wraps mid-phrase, and the assertion is
+    # about what the model is told to say, not about where the lines break.
+    prompt = re.sub(r"\s+", " ", lab_agent.SYSTEM_PROMPT).lower()
+    assert "not written down" in prompt
+    assert lab_query.detect_abstention("That is not written down in these files.")

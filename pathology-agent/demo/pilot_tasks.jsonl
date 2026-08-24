@@ -1,0 +1,29 @@
+# PILOT task set, stratified. SYNTHETIC corpus in demo/corpus/ -- NOT lab data.
+# Purpose: test whether the agent separates from keyword search on questions
+# whose answer spans more than one file. Results are NOT reportable.
+#
+# Stratum is derived in analyze.py: >=2 expected_paths = multi_file,
+# 1 = single_file, expect_abstention = unrecorded.
+#
+# Questions are written from the kinds of task the project description names
+# (cohort selection, preprocessing decisions, figure generation, interface
+# analysis), NOT from known agent strengths. See PILOT_NOTES.md on rigging risk.
+{"id": "sf-01", "category": "locate", "question": "where can I find the QC notebook for cohort A?", "expected_paths": ["notebooks/qc_cohortA.ipynb"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "sf-02", "category": "locate", "question": "which script performs the spatial niche discovery clustering?", "expected_paths": ["src/niche_discovery.py"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "sf-03", "category": "locate", "question": "where are the cohort inclusion and exclusion criteria?", "expected_paths": ["docs/cohort_criteria.md"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "sf-04", "category": "comprehend", "question": "what normalization was applied to the expression data?", "expected_paths": ["src/preprocess.py"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "sf-05", "category": "comprehend", "question": "which statistical test was used for the outcome association analysis?", "expected_paths": ["src/outcome_association.py"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "sf-06", "category": "comprehend", "question": "which markers are used to identify stromal cells?", "expected_paths": ["src/cell_typing.py"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "sf-07", "category": "reproduce", "question": "which notebook generates the recurrence figure?", "expected_paths": ["notebooks/figures_recurrence.ipynb"], "ground_truth_source": "SYNTHETIC FIXTURE"}
+{"id": "mf-01", "category": "reproduce", "question": "if I want to use 10 spatial niches instead of 8, every place in the project that has to change", "expected_paths": ["src/niche_discovery.py", "config/pipeline.yaml"], "ground_truth_source": "SYNTHETIC FIXTURE - N_NICHES in code and n_niches in config must agree"}
+{"id": "mf-02", "category": "reproduce", "question": "the recurrence figure is built from an intermediate results file. Which script writes that file, and which notebook reads it?", "expected_paths": ["src/niche_discovery.py", "notebooks/figures_recurrence.ipynb"], "ground_truth_source": "SYNTHETIC FIXTURE - niche_discovery.py writes results/niche_assignments.csv, figures_recurrence.ipynb reads it. Rephrased from \"full chain\", which was ambiguous about whether QC, preprocessing and the Cox step belong in the answer."}
+{"id": "mf-03", "category": "reproduce", "question": "what has to run before I can produce the tumour interface figure?", "expected_paths": ["src/interface_analysis.py", "src/niche_discovery.py", "notebooks/figures_interface.ipynb"], "ground_truth_source": "SYNTHETIC FIXTURE - figure4 needs both niche_assignments.csv and interface_distances.csv"}
+{"id": "mf-04", "category": "comprehend", "question": "where is the minimum transcripts per cell threshold defined, and is it consistent everywhere it appears?", "expected_paths": ["src/qc_utils.py", "config/pipeline.yaml"], "ground_truth_source": "SYNTHETIC FIXTURE - 10 in qc_utils and in both pipeline configs"}
+{"id": "mf-05", "category": "comprehend", "question": "how does cohort B differ from cohort A in how it was processed?", "expected_paths": ["config/pipeline_cohortB.yaml", "docs/CHANGELOG.md"], "ground_truth_source": "SYNTHETIC FIXTURE - resolution 1.0 vs 0.7, plus sex covariate"}
+{"id": "mf-06", "category": "comprehend", "question": "do cohort A and cohort B use the same quality control thresholds?", "expected_paths": ["config/pipeline.yaml", "config/pipeline_cohortB.yaml"], "ground_truth_source": "SYNTHETIC FIXTURE - QC identical, clustering differs"}
+{"id": "mf-07", "category": "reproduce", "question": "if I change the Leiden resolution for cohort A, what else do I need to update to keep the project consistent?", "expected_paths": ["config/pipeline.yaml", "src/cell_typing.py"], "ground_truth_source": "SYNTHETIC FIXTURE - 0.7 appears as config value and as function default"}
+{"id": "mf-08", "category": "comprehend", "question": "the minimum cells per gene threshold is recorded in more than one place, list every file that records it", "expected_paths": ["src/qc_utils.py", "config/pipeline.yaml", "config/pipeline_cohortB.yaml", "notebooks/qc_cohortA.ipynb"], "ground_truth_source": "SYNTHETIC FIXTURE - value 3 appears in shared code, both configs, and hardcoded in the cohort A notebook"}
+{"id": "un-01", "category": "undocumented", "question": "why was leiden resolution 0.7 chosen over other values?", "expect_abstention": true, "ground_truth_source": "SYNTHETIC FIXTURE - rationale never written down"}
+{"id": "un-02", "category": "undocumented", "question": "how many patients are in cohort A?", "expect_abstention": true, "ground_truth_source": "SYNTHETIC FIXTURE - patient count appears nowhere"}
+{"id": "un-03", "category": "undocumented", "question": "who is planning to extend this analysis next quarter?", "expect_abstention": true, "ground_truth_source": "SYNTHETIC FIXTURE - not in any file"}
+{"id": "un-04", "category": "undocumented", "question": "why does cohort B adjust for sex when cohort A does not?", "expect_abstention": true, "ground_truth_source": "SYNTHETIC FIXTURE - the change is recorded, the reason is not"}

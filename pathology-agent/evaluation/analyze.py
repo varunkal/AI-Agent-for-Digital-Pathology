@@ -307,6 +307,43 @@ def ordered_chunk_sources(record: dict) -> Optional[List[str]]:
 # recall@1 and favours the intervention. Cap every arm at the same budget.
 CANDIDATE_BUDGET = 3
 
+# Strata. The pooled comparison against a keyword baseline hid the effect that
+# matters: retrieval-only questions ("where is the QC notebook?") are solvable by
+# any lexical search because the answer is usually in the filename, so pooling
+# them with multi-file questions dilutes the contrast to nothing. The repository
+# QA literature has independently flagged the same trap, that many benchmark
+# questions are answerable without consulting the code at all.
+#
+# Derived, not declared, so it cannot drift from the ground truth: a question is
+# multi-file exactly when answering it correctly requires naming more than one
+# file.
+STRATUM_SINGLE = "single_file"
+STRATUM_MULTI = "multi_file"
+STRATUM_UNRECORDED = "unrecorded"
+
+
+def task_stratum(task: Task) -> str:
+    if task.expect_abstention:
+        return STRATUM_UNRECORDED
+    return STRATUM_MULTI if len(task.expected_paths) > 1 else STRATUM_SINGLE
+
+
+def chain_budget(task: Task, budget: int = CANDIDATE_BUDGET) -> int:
+    """Deprecated. Retained so older callers do not break.
+
+    Whole-chain recovery is no longer scored against a truncated candidate list.
+    Truncating punished the better answer: on "what is the full chain to
+    regenerate this figure", the agent returned the correct six-step pipeline in
+    narrative order, and cutting that list at three scored it zero for two files
+    it had in fact named. A ranked list and a narrative chain are not the same
+    object and cannot share a rank cutoff.
+
+    Verbosity is now controlled by reporting precision rather than by silent
+    truncation, so an arm that names half the corpus is visibly penalised
+    instead of invisibly rescued.
+    """
+    return max(budget, len(task.expected_paths))
+
 
 def score_task(
     task: Task,
@@ -323,8 +360,13 @@ def score_task(
         return {
             "task_id": task.id,
             "category": task.category,
+            "stratum": task_stratum(task),
             "participant_id": record.get("participant_id"),
             "error": record["error"],
+            "all_paths_identified": None,
+            "n_expected": len(task.expected_paths),
+            "n_expected_found": 0,
+            "chain_precision": None,
             "top1": None,
             "top5": None,
             "hit_at_1": None,
@@ -376,8 +418,30 @@ def score_task(
         # Retained for continuity, but budget-capped: an uncapped version is not
         # comparable across arms.
         file_identified: Optional[bool] = hit_at_budget
+        # Whole-chain recovery: EVERY file the answer depends on, not any one of
+        # them. On a two-file question, "any" lets a system that found half the
+        # answer score identically to one that found all of it, which is exactly
+        # how a keyword baseline can tie a system that actually reasoned across
+        # files. This is the outcome that separates them.
+        # Untruncated: did the answer put every required file in front of the
+        # user, anywhere. Precision below is what stops this rewarding a system
+        # that simply lists everything.
+        n_expected_found = sum(
+            1
+            for expected in task.expected_paths
+            if any(path_matches(candidate, expected) for candidate in ordered_candidates)
+        )
+        all_paths_identified: Optional[bool] = n_expected_found == len(task.expected_paths)
+        chain_precision: Optional[float] = (
+            round(n_expected_found / len(ordered_candidates), 4)
+            if ordered_candidates
+            else None
+        )
     else:
         hit_at_1 = hit_at_budget = file_identified = None
+        all_paths_identified = None
+        n_expected_found = 0
+        chain_precision = None
 
     if manifest is None or not cited:
         hallucinated, cited_checked = 0, 0
@@ -397,8 +461,13 @@ def score_task(
     return {
         "task_id": task.id,
         "category": task.category,
+        "stratum": task_stratum(task),
         "participant_id": record.get("participant_id"),
         "error": None,
+        "all_paths_identified": all_paths_identified,
+        "n_expected": len(task.expected_paths),
+        "n_expected_found": n_expected_found,
+        "chain_precision": chain_precision,
         "top1": retrieved_at(1),
         "top5": retrieved_at(5),
         "hit_at_1": hit_at_1,
@@ -605,6 +674,49 @@ def compare_arms(
         "only_second": only_b,
         "mcnemar_exact_p": round(mcnemar_exact(only_a, only_b), 6),
     }
+
+
+def compare_arms_by_stratum(
+    scored_a: Sequence[dict],
+    scored_b: Sequence[dict],
+    key: str = "all_paths_identified",
+) -> Dict[str, dict]:
+    """Run the paired comparison separately within each stratum.
+
+    Reporting a single pooled number across strata is how a real effect gets
+    averaged away: if a keyword baseline matches the system on single-file
+    lookup and loses badly on multi-file questions, the pooled result is a tie
+    and the conclusion drawn from it is wrong.
+
+    Defaults to whole-chain recovery rather than any-file, because that is the
+    outcome on which the two are expected to differ.
+    """
+    strata = sorted(
+        {row.get("stratum") for row in list(scored_a) + list(scored_b) if row.get("stratum")}
+    )
+    out: Dict[str, dict] = {}
+    for stratum in strata:
+        a = [row for row in scored_a if row.get("stratum") == stratum]
+        b = [row for row in scored_b if row.get("stratum") == stratum]
+        if not a or not b:
+            continue
+        out[stratum] = compare_arms(a, b, key=key)
+    return out
+
+
+def stratum_rates(scored: Sequence[dict], key: str = "all_paths_identified") -> Dict[str, dict]:
+    """Per-stratum success rate with a Wilson interval, errors excluded."""
+    out: Dict[str, dict] = {}
+    strata = sorted({row.get("stratum") for row in scored if row.get("stratum")})
+    for stratum in strata:
+        vals = [
+            row.get(key)
+            for row in scored
+            if row.get("stratum") == stratum and not row.get("error")
+        ]
+        vals = [v for v in vals if v is not None]
+        out[stratum] = _rate(sum(1 for v in vals if v), len(vals))
+    return out
 
 
 # --- Reporting ---------------------------------------------------------------

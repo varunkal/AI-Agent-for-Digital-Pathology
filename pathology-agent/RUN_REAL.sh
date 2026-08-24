@@ -53,6 +53,12 @@ export LAB_CHAT_MODEL=qwen3:4b
 # headroom; on a GPU node this will be far lower.
 export LEVYBOY_AGENT_TIMEOUT=300
 export PYTHONPATH=~/pathology-agent/rag:~/labagent/rag
+# The vector index. Without this, lab_query.config() resolves CHROMA_DIR from
+# lab_rag and the bot silently reads the index inside the team lead's clone,
+# which is untracked there and was six files out of date. Pointing at our own
+# copy makes the dependency explicit and puts the index under our control.
+# Rebuild it with:  python demo/reindex.py
+export LAB_CHROMA_DIR=~/pathology-agent/rag/chroma_db
 # Corpus root enables workflow tracing and agent mode.
 export LEVYBOY_CORPUS=~/pathology-agent/demo/corpus
 # Lab conventions injected into every answer (Aim 2).

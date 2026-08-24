@@ -1,8 +1,10 @@
-__pycache__/
-*.pyc
-.env
-demo/demo_manifest.txt
 
 # Slack tokens — never commit
-.levyboy_tokens
+*.pyc
 *.tokens
+.DS_Store
+.env
+.levyboy_tokens
+__pycache__/
+demo/demo_manifest.txt
+rag/chroma_db/

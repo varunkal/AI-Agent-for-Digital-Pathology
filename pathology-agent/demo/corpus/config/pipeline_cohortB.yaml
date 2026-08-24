@@ -1,0 +1,16 @@
+# Cohort B Xenium pipeline configuration
+# Cohort B reuses the Cohort A QC thresholds but clusters more finely.
+cohort: cohortB
+panel_genes: 103
+qc:
+  min_transcripts_per_cell: 10
+  min_cells_per_gene: 3
+clustering:
+  leiden_resolution: 1.0
+niches:
+  k_neighbors: 15
+  n_niches: 8
+stats:
+  model: cox_proportional_hazards
+  covariates: [stage, age, sex]
+  correction: benjamini_hochberg
