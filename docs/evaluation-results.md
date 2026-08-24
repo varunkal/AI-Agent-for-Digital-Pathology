@@ -114,6 +114,47 @@ reading each answer.
 Separately, this hedging is worth noting as its own behaviour: the system
 sometimes disclaims knowledge it demonstrably has.
 
+## Ground-truth verification
+
+Because the ground truth was drafted by reading the corpus rather than by its
+author, it was checked before the numbers were reported. Scripts are in
+`evaluation/` so any claim below can be re-run.
+
+**Machine-checked, passed:**
+
+| Check | Script | Result |
+|---|---|---|
+| Every `comprehend` value exists in its claimed file | `verify_comprehend.py` | 8/8 pass |
+| No `undocumented` control has an answer in the corpus | `verify_controls.py` | 5/5 clean |
+
+The control check searches the **stored chunk text**, i.e. exactly what
+retrieval can see, not the files on disk. That matters: a naive `grep` over
+`scripts/` also matches `__pycache__/` and `.ipynb_checkpoints/`, which the
+indexer skips and the model can never retrieve. Patterns searched included
+consent, journal, submitted to, patient age, demographic, hospital, Hitchcock,
+DHMC, medical center, institution, NIH, NSF, R01, P30, U01, grant, funding,
+funded by, supported by, award.
+
+**Two gray areas, disclosed rather than hidden:**
+
+1. The string "Dartmouth" does occur once in the indexed text, in a comment
+   about the cluster's `/etc/bashrc` handling of an unbound variable. It is
+   unrelated to specimen provenance and the model did not use it, but
+   `und-004` ("which hospital did the specimens come from?") is therefore not
+   perfectly uncontaminated.
+2. Scoring `und-005` as an over-claim is a judgement. The model reported the
+   funding source as `qdp-alpha`, taken from a `#SBATCH --account` line. A
+   SLURM billing account is not a funding source, but it is arguably adjacent
+   to one. A reviewer could contest this call.
+
+**Not machine-checkable, pending human review:**
+
+The 10 `locate` and 7 `reproduce` answers rest on reading each script's
+docstring. No program can confirm that a file does what a question asks.
+`evaluation/gt_review_sheet.txt` pairs every claim with the file's own opening
+lines for confirmation; regenerate it with `make_review_sheet.py`. `rep-007` is
+the weakest item and is flagged in the task file as name-based only.
+
 ## Limitations
 
 - **Five controls is too few.** The abstention interval (38-96%) establishes

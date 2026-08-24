@@ -1,0 +1,264 @@
+==============================================================================
+loc-001  [locate]
+Q: which script runs the linear probe?
+CLAIMED ANSWER: scripts/linear_probe.py
+------------------------------------------------------------------------------
+  scripts/linear_probe.py opens with:
+      """
+      linear_probe.py -- slide-grouped linear probe on saved features. CPU only, seconds.
+      WHY THIS AND NOT CLUSTERING
+        The pretrained baseline scored ARI -0.0155 / silhouette -0.0167 against the human
+        labels: KMeans found nothing aligned with them. That is NOT the same as "the features
+        carry no class information". KMeans splits along the highest-VARIANCE direction; if
+        the class signal lives on a lower-variance axis (and PC1 alone holds 41% of variance
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-002  [locate]
+Q: where are the thyroid-specific extraction parameters kept?
+CLAIMED ANSWER: scripts/thyroid_config.py
+------------------------------------------------------------------------------
+  scripts/thyroid_config.py opens with:
+      """
+      thyroid_config.py
+      =================
+      Thyroid-FNA CONFIG block for extract_cyto_objects.py (the PanCyto SSL extractor).
+      The extractor architecture is reusable across specimens; the PARAMETERS are not.
+      This module holds the thyroid-tuned values + the biology they come from, so the
+      cervical defaults in extract_cyto_objects.py are never silently reused on thyroid.
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-005  [locate]
+Q: where do we check whether the DINO head is dead?
+CLAIMED ANSWER: scripts/inspect_dino_head.py
+------------------------------------------------------------------------------
+  scripts/inspect_dino_head.py opens with:
+      """
+      inspect_dino_head.py  --  is the DINO head dead, or is the config off?
+      Usage:
+          python inspect_dino_head.py /path/to/eval/training_1999/teacher_checkpoint.pth
+          python inspect_dino_head.py /path/to/POC1_run/ckpt/1999          # dir or file
+      Prints the norm of every DINO/iBOT head 'last_layer' weight it finds, plus the
+      per-prototype norm spread. Verdict at the bottom.
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-006  [locate]
+Q: which script prints the contingency table behind the ARI and NMI numbers?
+CLAIMED ANSWER: scripts/diagnose_metrics.py
+------------------------------------------------------------------------------
+  scripts/diagnose_metrics.py opens with:
+      """
+      diagnose_metrics.py -- print the contingency table behind the ARI/NMI numbers, and
+      correlate PC1 against crop geometry. Read-only, no GPU, seconds to run.
+      WHY
+        The baseline reported ARI = -0.0083 with NMI = 0.1616 on a 2-cluster / 2-class
+        comparison (cluster sizes 38,431 / 21,569).
+        RETRACTION: an earlier version of this docstring claimed that pairing was "not
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-007  [locate]
+Q: what proves a checkpoint is actually trainable before we spend GPU hours on it?
+CLAIMED ANSWER: scripts/verify_full_ckpt.py
+------------------------------------------------------------------------------
+  scripts/verify_full_ckpt.py opens with:
+      """
+      verify_full_ckpt.py -- prove the head-extended checkpoint is trainable BEFORE spending
+      GPU-hours on it.
+      WHY THIS EXISTS
+        extend_ckpt_with_heads.py printed "strict load into the student: OK". That check was
+        worthless: SSLMetaArch builds the backbone on the META device (FSDP2 materialises it
+        later during sharding), so load_state_dict copies are silent no-ops and the call
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-008  [locate]
+Q: where do we measure per-channel mean and standard deviation on the training crops?
+CLAIMED ANSWER: scripts/set_rgb_stats.py
+------------------------------------------------------------------------------
+  scripts/set_rgb_stats.py opens with:
+      """
+      set_rgb_stats.py -- measure per-channel mean/std on the training crops and write them
+      into the config's rgb_mean / rgb_std, in place.
+      WHY: the config ships with the URINE project's values as placeholders. Cervical is
+      Pap-stained and the crops are white-masked, so the true statistics differ. Editing
+      by hand invites a transcription error in six numbers that nothing downstream checks.
+      It reads the SAME file list the training run will use, so the statistics describe
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-009  [locate]
+Q: which script runs RGB connected-components head to head against YOLO v6?
+CLAIMED ANSWER: scripts/compare_detectors.py
+------------------------------------------------------------------------------
+  scripts/compare_detectors.py opens with:
+      """
+      compare_detectors.py -- head-to-head: RGB connected-components vs. YOLO v6,
+      feeding the SAME downstream QC (nucleus/RBC/focus) + white-bg masking so the
+      ONLY variable is the detector. Single-cell extraction.
+      SCALE (v2, corrected): v6's checkpoint metadata reports imgsz=640, task=segment,
+      classes={0:'cell'}. It is therefore run here at CROP_LEVEL (level 0, 40x) in
+      640px tiles with imgsz=640 -- its native training scale. The earlier version ran
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-010  [locate]
+Q: how do we decide whether two slide-grouped probe scores actually differ?
+CLAIMED ANSWER: scripts/compare_probes.py
+------------------------------------------------------------------------------
+  scripts/compare_probes.py opens with:
+      """
+      compare_probes.py -- decide whether two slide-grouped probe scores actually differ.
+      WHY THIS EXISTS
+        Two probes came back macro-F1 0.7765 (pretrained) vs 0.7274 (fine-tuned), a gap of
+        0.049. The obvious mistake is to compare that against the PERMUTATION sd (~0.011) and
+        declare it significant. The permutation baseline measures the spread of the NULL --
+        how well a shuffled-label probe scores -- not the sampling variance of the observed
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-011  [locate]
+Q: where do we verify that test_object_type.csv agrees with the manifests?
+CLAIMED ANSWER: scripts/check_label_alignment.py
+------------------------------------------------------------------------------
+  scripts/check_label_alignment.py opens with:
+      """
+      check_label_alignment.py -- verify that test_object_type.csv agrees with the manifests.
+      WHY THIS EXISTS
+        The test split reported 78.6% 'cluster' / 21.4% 'cell'. The harvest's measured
+        corpus-wide mix is the opposite: 94.2% cell / 4.8% cluster / 1.0% fragment. A 60k
+        sample cannot invert that by chance, so one of these is wrong:
+          (a) the per-slide even quota in build_pi_splits.py sampled the 22 test slides in a
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+loc-012  [locate]
+Q: which script completes a backbone-only checkpoint so the strict training loader accepts it?
+CLAIMED ANSWER: scripts/extend_ckpt_with_heads.py
+------------------------------------------------------------------------------
+  scripts/extend_ckpt_with_heads.py opens with:
+      """
+      extend_ckpt_with_heads.py -- complete a backbone-only checkpoint so the STRICT training
+      loader accepts it.
+      THE PROBLEM
+        convert_hf_to_dinov3_ckpt.py produced {"teacher": {"backbone.*": ...}} -- 176 tensors,
+        the ViT only. HuggingFace ships no DINO or iBOT projection heads. checkpointer.py:297
+        calls load_state_dict WITHOUT strict=False, so training raises on the missing head
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+rep-001  [reproduce]
+Q: how would I re-run the thyroid extraction as a SLURM job?
+CLAIMED ANSWER: scripts/run_thyroid_extraction.sbatch, scripts/run_one_thyroid_slide.py
+------------------------------------------------------------------------------
+  scripts/run_thyroid_extraction.sbatch opens with:
+      #SBATCH --job-name=cyto_thyroid
+      #SBATCH --account=qdp-alpha
+      #SBATCH --partition=v100_vaickus
+      #SBATCH --gres=gpu:1
+      #SBATCH --cpus-per-task=4
+      #SBATCH --mem=48G
+      #SBATCH --time=06:00:00
+  scripts/run_one_thyroid_slide.py opens with:
+      """
+      run_one_thyroid_slide.py
+      ========================
+      Per-slide driver for thyroid cluster+cell extraction, for use in a SLURM array.
+      WHY THIS WRAPPER EXISTS:
+        Anvith's fast_cca_yolo_gpu.py has INPUT_PATH / OUTPUT_ROOT / MODEL_PATH as
+        hardcoded CONFIG constants and does all its work under `if __name__=="__main__"`.
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+rep-002  [reproduce]
+Q: what produces the TEST and FINETUNE crop lists?
+CLAIMED ANSWER: scripts/build_pi_splits.py
+------------------------------------------------------------------------------
+  scripts/build_pi_splits.py opens with:
+      """
+      build_pi_splits.py -- build the TEST and FINETUNE crop lists for the baseline-first
+      plan (pretrained DINOv3 baseline -> fine-tune -> compare -> only then from-scratch).
+      THE ONE THING THIS SCRIPT EXISTS TO GUARANTEE
+        "Do finetuning using 60,000-120,000 examples that are not part of your test set."
+        Read literally, that is satisfied by any crop-level split. That is NOT enough.
+        Crops from the same slide share patient, stain batch, scanner session and
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+rep-003  [reproduce]
+Q: how do I embed a file list and then cluster it using a backbone built from the research repo?
+CLAIMED ANSWER: scripts/embed_repo_backbone.py, scripts/embed_and_cluster.py
+------------------------------------------------------------------------------
+  scripts/embed_repo_backbone.py opens with:
+      """
+      embed_repo_backbone.py -- embed a file list with a DINOv3 backbone built from the
+      RESEARCH REPO (not HuggingFace), given a bare backbone state_dict.
+      WHY NOT embed_and_cluster.py --repo/--weights
+        That path calls torch.hub.load(repo, entry, source="local", weights=...), which needs a
+        hubconf.py at the repo root exposing that entry and accepting a `weights` kwarg. A grep
+        for 'weights' and 'def dinov3_vitb16' in hubconf.py returned NOTHING, so that path has
+  scripts/embed_and_cluster.py opens with:
+      """
+      embed_and_cluster.py -- embed a FILE LIST with a DINOv3 backbone, then run PCA,
+      KMeans clustering, and label-aware clustering metrics. Writes a diagram and a
+      machine-readable metrics.json so runs can be compared numerically later.
+      WHY NOT eval_features.py
+        It expects root/<class>/*.png (a labelled directory), computes only silhouette, and
+        builds models via torch.hub with pretrained=True (a network download). This script:
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+rep-004  [reproduce]
+Q: how do I download a DINOv3 backbone from HuggingFace and confirm it actually loads?
+CLAIMED ANSWER: scripts/fetch_dinov3_hf.py
+------------------------------------------------------------------------------
+  scripts/fetch_dinov3_hf.py opens with:
+      """
+      fetch_dinov3_hf.py -- download a DINOv3 backbone from HuggingFace into a local
+      directory, then VERIFY it loads and report its feature dimension.
+      WHY NOT JUST GRAB model.safetensors FROM THE WEB UI
+        MEASURED: a directory containing only model.safetensors fails with
+            ValueError: Unrecognized model ... Should have a `model_type` key in its config.json
+        transformers needs config.json to know which architecture to build. The weights file
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+rep-005  [reproduce]
+Q: what should I run to check the evaluation assets before spending any GPU time?
+CLAIMED ANSWER: scripts/check_eval_assets.py
+------------------------------------------------------------------------------
+  scripts/check_eval_assets.py opens with:
+      """
+      check_eval_assets.py -- answer the three questions that gate the cervical baseline,
+      before spending any GPU time.
+        Q1  Which slides are in the 189-slide cohort, and does that count match the
+            sbatch array bound?
+        Q2  Which slides do liaoi's GeoJSON annotations sit on -- and do those slides
+            overlap the cohort?  If they do, they MUST be held out of fine-tuning, or
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+rep-006  [reproduce]
+Q: how do I pull a plain backbone state_dict out of a distributed checkpoint?
+CLAIMED ANSWER: scripts/extract_backbone_from_dcp.py
+------------------------------------------------------------------------------
+  scripts/extract_backbone_from_dcp.py opens with:
+      """
+      extract_backbone_from_dcp.py -- pull a plain backbone state_dict out of a DINOv3
+      distributed checkpoint (ckpt/<iter>/__0_0.distcp), so it can be loaded into a
+      DinoVisionTransformer for embedding.
+      WHY
+        The training run writes torch.distributed.checkpoint (DCP) format: a directory of
+        .distcp shards plus metadata, not a torch.save state_dict. It also holds the student,
+  CONFIRM? [ ] yes   [ ] no
+
+==============================================================================
+rep-007  [reproduce]
+Q: how do I run the cervical extraction with YOLO as a batch job?
+CLAIMED ANSWER: scripts/run_cervical_extraction_yolo.sbatch
+------------------------------------------------------------------------------
+  scripts/run_cervical_extraction_yolo.sbatch opens with:
+  CONFIRM? [ ] yes   [ ] no
+
