@@ -71,17 +71,70 @@ class PathGuard:
                   the guard is strictly read-only.
     """
 
+    DEFAULT_DENIED = (".git", ".env", "id_rsa", "id_ed25519", ".ssh")
+
     def __init__(
         self,
         read_roots: Sequence[str],
         write_root: Optional[str] = None,
-        denied_names: Iterable[str] = (".git", ".env", "id_rsa", "id_ed25519", ".ssh"),
+        denied_names: Iterable[str] = DEFAULT_DENIED,
+        allowed_extensions: Optional[Iterable[str]] = None,
     ) -> None:
+        """
+        denied_names:       directory or file NAMES that may never be touched, at
+                            any depth. Checked per path component, so passing
+                            "eval" blocks <root>/eval/anything.
+        allowed_extensions: when set, ONLY files with these extensions may be
+                            read. None means no extension restriction.
+
+        The two together are what let this guard mirror an indexer's allowlist.
+        On a real lab corpus that is a privacy control, not tidiness: a cytology
+        project's eval/ directory holds slide-ID lists, and its compare*/
+        filenames are accession numbers, so a tool that walks the tree freely
+        can surface patient identifiers even when it never opens a data file.
+        """
         if not read_roots:
             raise ValueError("PathGuard requires at least one readable root.")
         self.read_roots: List[str] = [_real(r) for r in read_roots]
         self.write_root: Optional[str] = _real(write_root) if write_root else None
         self.denied_names = tuple(denied_names)
+        self.allowed_extensions: Optional[tuple] = (
+            tuple(e.lower() if e.startswith(".") else "." + e.lower()
+                  for e in allowed_extensions)
+            if allowed_extensions is not None
+            else None
+        )
+
+    @classmethod
+    def from_env(
+        cls,
+        read_roots: Sequence[str],
+        write_root: Optional[str] = None,
+        env: Optional[dict] = None,
+    ) -> "PathGuard":
+        """Build a guard from the SAME environment variables the indexer uses.
+
+        LAB_RAG_SKIP_DIRS and LAB_RAG_EXTENSIONS are read by lab_rag.py when
+        building the vector index. Reading them here too means one setting
+        controls what gets indexed AND what the agent's file tools may touch, so
+        the two cannot drift apart and leave the agent able to read something
+        that was deliberately kept out of the index.
+        """
+        environ = os.environ if env is None else env
+
+        skip = [
+            d.strip() for d in (environ.get("LAB_RAG_SKIP_DIRS") or "").split(",")
+            if d.strip()
+        ]
+        exts_raw = (environ.get("LAB_RAG_EXTENSIONS") or "").strip()
+        exts = [e.strip() for e in exts_raw.split(",") if e.strip()] or None
+
+        return cls(
+            read_roots,
+            write_root=write_root,
+            denied_names=tuple(cls.DEFAULT_DENIED) + tuple(skip),
+            allowed_extensions=exts,
+        )
 
     # -- checks ---------------------------------------------------------------
 
@@ -93,9 +146,34 @@ class PathGuard:
                 f"Refusing to access {path!r}: contains protected component {sorted(hit)!r}"
             )
 
+    def _extension_denied(self, name: str) -> bool:
+        if self.allowed_extensions is None:
+            return False
+        return os.path.splitext(name)[1].lower() not in self.allowed_extensions
+
+    def _check_extension(self, path: str) -> None:
+        """Refuse a file type outside the allowlist, when one is configured.
+
+        Directory exclusion alone is not enough. A slide-ID list dropped
+        anywhere in the tree is a .txt file, and if .txt is not on the allowlist
+        it cannot be read regardless of where it sits.
+        """
+        if self.allowed_extensions is None:
+            return
+        # Directories carry no extension and are governed by denied_names.
+        if os.path.isdir(path):
+            return
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in self.allowed_extensions:
+            raise UnsafePathError(
+                f"Refusing to read {path!r}: extension {ext or '(none)'!r} is not in "
+                f"the allowed set {self.allowed_extensions!r}"
+            )
+
     def check_readable(self, path: str) -> str:
         """Return the resolved path if it may be read; else raise."""
         self._check_denied(path)
+        self._check_extension(path)
         if any(is_within(path, root) for root in self.read_roots):
             return _real(path)
         raise UnsafePathError(
@@ -144,7 +222,17 @@ class PathGuard:
                     for d in dirnames
                     if not d.startswith(".") and d not in self.denied_names
                 ]
-                yield dirpath, dirnames, filenames
+                # Filenames are filtered too, not just directories. Listing a
+                # file the guard would refuse to open advertises its existence,
+                # and on a real corpus the filename can itself be the sensitive
+                # part: an accession number in the name leaks whether or not
+                # anything ever reads the contents.
+                visible = [
+                    f
+                    for f in filenames
+                    if f not in self.denied_names and not self._extension_denied(f)
+                ]
+                yield dirpath, dirnames, visible
 
 
 # --- Capability declaration --------------------------------------------------

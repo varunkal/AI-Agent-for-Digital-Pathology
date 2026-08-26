@@ -22,6 +22,10 @@ fi
 # shellcheck disable=SC1090
 source "$TOKENS"
 
+# Kill any previous instance. This matches only because the exec at the bottom
+# launches app.py by absolute path: with a bare `app.py` the process command
+# line is just "python3 -u app.py", this pattern matches nothing, and running
+# the launcher twice leaves two bots answering every message.
 pkill -f "levyboy-slackbot/app.py" 2>/dev/null || true
 # Model residency. Two settings, arrived at the hard way:
 #
@@ -73,4 +77,4 @@ if ! "$PYBIN" -c "import dotenv, slack_bolt" 2>/dev/null; then
   echo "dotenv, slack_bolt, chromadb and ollama."
   exit 1
 fi
-exec "$PYBIN" -u app.py
+exec "$PYBIN" -u "$PWD/app.py"

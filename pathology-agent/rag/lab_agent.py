@@ -337,7 +337,12 @@ class LabTools:
 
         import safety
 
-        self.guard = safety.PathGuard(
+        # from_env, not the plain constructor: this picks up LAB_RAG_SKIP_DIRS
+        # and LAB_RAG_EXTENSIONS, the same variables that decide what the
+        # indexer stores. Without it the agent's file tools can read what was
+        # deliberately kept out of the vector index. On a real cytology corpus
+        # that difference is slide identifiers reaching Slack.
+        self.guard = safety.PathGuard.from_env(
             read_roots=[self.corpus_root],
             write_root=scratch_dir if allow_execution else None,
         )
@@ -399,6 +404,21 @@ class LabTools:
         try:
             text = self.guard.read_text(candidate)
         except Exception as exc:
+            import safety
+
+            # A refusal must not repeat what it refused. PathGuard's message
+            # names the offending path, and on a real corpus the path IS the
+            # sensitive part: compare_v2/469506_RGB.png carries an accession
+            # number in the filename. Echoing it into the tool result puts it in
+            # the transcript, and from there it can reach the answer. The model
+            # is told the request was denied and nothing more.
+            if isinstance(exc, safety.UnsafePathError):
+                return (
+                    "Access to that path is not permitted. It is outside the "
+                    "readable corpus, or in a directory or file type this "
+                    "project excludes. Do not retry it and do not repeat the "
+                    "path. Use list_files to see what is available."
+                )
             return f"Could not read {path!r}: {type(exc).__name__}: {exc}"
         normalized = os.path.relpath(os.path.realpath(candidate), self.corpus_root)
         if normalized not in self.sources_seen:

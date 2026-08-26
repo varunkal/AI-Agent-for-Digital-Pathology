@@ -1593,10 +1593,12 @@ def test_execution_tool_is_not_even_offered_when_disabled():
 
 
 def test_read_file_is_confined_by_the_safety_guard():
-    """The agent's read tool must obey the same allowlist as everything else."""
+    """The agent's read tool must obey the same allowlist as everything else,
+    and the refusal must not name what it refused."""
     tools = lab_agent.LabTools(CORPUS)
     out = tools.read_file("../../../etc/passwd")
-    assert "Could not read" in out
+    assert "not permitted" in out
+    assert "passwd" not in out
 
 
 def test_reading_a_real_corpus_file_works():
@@ -2092,3 +2094,179 @@ def test_the_agent_prompt_and_the_detector_agree():
     prompt = re.sub(r"\s+", " ", lab_agent.SYSTEM_PROMPT).lower()
     assert "not written down" in prompt
     assert lab_query.detect_abstention("That is not written down in these files.")
+
+
+# =============================================================================
+# Corpus exclusions: the agent's file tools must honour the indexer's allowlist
+# =============================================================================
+#
+# Three of the agent's four tools reach the filesystem directly rather than
+# through the vector index, so excluding a directory at index time does not stop
+# the agent reading it. On a real cytology corpus that gap is slide identifiers
+# reaching Slack: eval/ holds slide-ID lists, and compare*/ filenames are
+# accession numbers, which leak through a path even when no content is read.
+
+PANCYTO_SKIP = "corpus,eval,runs,extraction,compare,compare_v2,compare_v3,test_slides,third_party,preview,models,YOLO"
+PANCYTO_EXTS = ".py,.ipynb,.yaml,.yml,.sh,.sbatch"
+
+
+def _pancyto_like(root):
+    """A miniature of the real corpus: allowed code, plus the two danger cases."""
+    for rel, body in {
+        "scripts/linear_probe.py": "# slide-grouped linear probe\n",
+        "scripts/run_thyroid_extraction.sbatch": "#SBATCH --account=qdp-alpha\n",
+        "configs/train.yaml": "rgb_mean: [0.1, 0.2, 0.3]\n",
+        "notebooks/explore.ipynb": '{"cells":[]}',
+        "eval/train_files.txt": "469506\n471223\n",          # slide IDs
+        "compare_v2/469506_RGB.png": "binary-ish",           # accession in the NAME
+        "runs/2026-08-01/config.yaml": "rgb_mean: [9, 9, 9]\n",
+    }.items():
+        full = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as fh:
+            fh.write(body)
+
+
+def _pancyto_guard(root):
+    return safety.PathGuard.from_env(
+        [root],
+        env={"LAB_RAG_SKIP_DIRS": PANCYTO_SKIP, "LAB_RAG_EXTENSIONS": PANCYTO_EXTS},
+    )
+
+
+def test_excluded_directories_cannot_be_read():
+    with tempfile.TemporaryDirectory() as root:
+        _pancyto_like(root)
+        guard = _pancyto_guard(root)
+
+        # The allowed code is readable.
+        assert "linear probe" in guard.read_text(os.path.join(root, "scripts/linear_probe.py"))
+
+        # The slide-ID list is not, by directory AND by extension.
+        with pytest.raises(safety.UnsafePathError):
+            guard.read_text(os.path.join(root, "eval/train_files.txt"))
+        with pytest.raises(safety.UnsafePathError):
+            guard.read_text(os.path.join(root, "compare_v2/469506_RGB.png"))
+        with pytest.raises(safety.UnsafePathError):
+            guard.read_text(os.path.join(root, "runs/2026-08-01/config.yaml"))
+
+
+def test_excluded_paths_are_not_even_listed():
+    """Listing is a leak on its own. An accession number in a filename is
+    disclosed by naming the file, whether or not anything opens it."""
+    with tempfile.TemporaryDirectory() as root:
+        _pancyto_like(root)
+        guard = _pancyto_guard(root)
+
+        # realpath: the guard resolves symlinks, and on macOS /var is a link to
+        # /private/var, so relpath against the unresolved root walks upwards.
+        real_root = os.path.realpath(root)
+        listed = []
+        for dirpath, _dirs, files in guard.walk_readable():
+            for name in files:
+                listed.append(
+                    os.path.relpath(os.path.join(dirpath, name), real_root).replace(os.sep, "/")
+                )
+
+        assert sorted(listed) == [
+            "configs/train.yaml",
+            "notebooks/explore.ipynb",
+            "scripts/linear_probe.py",
+            "scripts/run_thyroid_extraction.sbatch",
+        ]
+        assert not any("469506" in p for p in listed)
+        assert not any(p.startswith(("eval/", "runs/", "compare")) for p in listed)
+
+
+def test_extension_allowlist_blocks_a_stray_file_in_an_allowed_directory():
+    """Directory exclusion alone is not enough: a slide list dropped into
+    scripts/ is still a .txt and must still be refused."""
+    with tempfile.TemporaryDirectory() as root:
+        _pancyto_like(root)
+        with open(os.path.join(root, "scripts", "stray_slide_ids.txt"), "w") as fh:
+            fh.write("469506\n")
+        guard = _pancyto_guard(root)
+
+        with pytest.raises(safety.UnsafePathError):
+            guard.read_text(os.path.join(root, "scripts/stray_slide_ids.txt"))
+
+        listed = [n for _d, _s, fs in guard.walk_readable() for n in fs]
+        assert "stray_slide_ids.txt" not in listed
+
+
+def test_no_allowlist_configured_means_no_extension_restriction():
+    """The synthetic corpus has .md docs and must keep working when the
+    PanCyto-specific variables are not set."""
+    with tempfile.TemporaryDirectory() as root:
+        _pancyto_like(root)
+        guard = safety.PathGuard.from_env([root], env={})
+        assert guard.allowed_extensions is None
+        assert guard.read_text(os.path.join(root, "eval/train_files.txt"))
+
+
+def test_the_tracer_does_not_descend_into_excluded_directories():
+    """The tracer walks the filesystem itself, so it is the one tool the index's
+    exclusions never covered."""
+    import workflow
+
+    with tempfile.TemporaryDirectory() as root:
+        _pancyto_like(root)
+        os.makedirs(os.path.join(root, "compare_v3"), exist_ok=True)
+        with open(os.path.join(root, "compare_v3", "leak.py"), "w") as fh:
+            fh.write("open('results/figure.png')\n")
+
+        wide = workflow.scan_corpus(root, skip_dirs=())
+        assert any(p.startswith("compare_v3/") for p in wide)
+
+        narrow = workflow.scan_corpus(root, skip_dirs=PANCYTO_SKIP.split(","))
+        assert not any(p.startswith("compare_v3/") for p in narrow)
+        assert "scripts/linear_probe.py" in narrow
+
+
+def test_agent_tools_inherit_the_exclusions_from_the_environment(monkeypatch):
+    """End to end through LabTools, which is what the Slack bot actually builds."""
+    import lab_agent
+
+    monkeypatch.setenv("LAB_RAG_SKIP_DIRS", PANCYTO_SKIP)
+    monkeypatch.setenv("LAB_RAG_EXTENSIONS", PANCYTO_EXTS)
+
+    with tempfile.TemporaryDirectory() as root:
+        _pancyto_like(root)
+        tools = lab_agent.LabTools(root)
+
+        listing = tools.list_files("")
+        assert "scripts/linear_probe.py" in listing
+        assert "469506" not in listing
+        assert "eval/" not in listing
+
+        refused = tools.read_file("eval/train_files.txt")
+        assert "469506" not in refused          # the refusal must not echo content
+        assert "not permitted" in refused
+
+
+def test_a_refusal_never_repeats_the_path_it_refused(monkeypatch):
+    """The path is the sensitive part on a real corpus. compare_v2/469506_RGB.png
+    carries an accession number in the filename, so echoing the denied path into
+    the tool result puts it in the transcript and from there into an answer."""
+    import lab_agent
+
+    monkeypatch.setenv("LAB_RAG_SKIP_DIRS", PANCYTO_SKIP)
+    monkeypatch.setenv("LAB_RAG_EXTENSIONS", PANCYTO_EXTS)
+
+    with tempfile.TemporaryDirectory() as root:
+        _pancyto_like(root)
+        tools = lab_agent.LabTools(root)
+
+        for denied in (
+            "eval/train_files.txt",
+            "compare_v2/469506_RGB.png",
+            "/etc/passwd",
+            "../../../etc/passwd",
+        ):
+            out = tools.read_file(denied)
+            assert "469506" not in out
+            assert "passwd" not in out
+            assert "not permitted" in out
+
+        # A readable file still comes back normally.
+        assert "linear probe" in tools.read_file("scripts/linear_probe.py")

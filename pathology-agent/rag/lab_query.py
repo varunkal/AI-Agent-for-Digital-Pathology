@@ -311,6 +311,13 @@ ABSTENTION_MARKERS = (
     "does not contain enough information",
     "doesn't contain information",
     "does not contain information",
+    # Plural verb forms. The model wrote "the files do not contain information"
+    # and a genuine refusal was scored as a fabrication, turning 4/5 correct
+    # abstention into 3/5 on a real run. Reported by the evaluation on PanCyto.
+    "do not contain information",
+    "don't contain information",
+    "do not contain enough information",
+    "don't contain enough information",
     "not enough information",
     "insufficient information",
     "no information",
@@ -351,6 +358,20 @@ def detect_abstention(answer: str, markers: Sequence[str] = ABSTENTION_MARKERS) 
     Deliberately a transparent keyword rule, not a model judgement: the paper
     needs this inspectable and reproducible. Report it as a heuristic and
     hand-check a sample.
+
+    KNOWN LIMIT, and a fix that was tried and rejected. Adding "does not
+    specify" reclassified two answerable questions as refusals, because the
+    model hedges and then answers anyway:
+
+        "The provided context does not specify the macro-F1 score of the frozen
+        pretrained baseline. The files mention that the frozen baseline used
+        ImageNet statistics and achieved a score of 0.775"
+
+    That contains a refusal phrase and the correct answer. Substring matching is
+    unreliable in both directions and cannot be fixed by adding more strings. At
+    five controls the classification was checked by reading. Past roughly
+    fifteen that stops being practical and this needs to become something other
+    than substring matching.
     """
     lowered = (answer or "").lower()
     return any(marker in lowered for marker in markers)

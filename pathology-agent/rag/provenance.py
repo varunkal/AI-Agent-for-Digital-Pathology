@@ -44,6 +44,12 @@ SAMPLING_OPTIONS: Dict[str, Any] = {
 }
 
 
+def _last_token(text: Optional[str]) -> Optional[str]:
+    """Final whitespace-separated token, or None. Never raises on empty input."""
+    parts = (text or "").split()
+    return parts[-1] if parts else None
+
+
 def _run(cmd: list) -> Optional[str]:
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
@@ -152,7 +158,10 @@ def collect(
         "software": {
             "python": sys.version.split()[0],
             "platform": platform.platform(),
-            "ollama_client": (_run(["ollama", "--version"]) or "").split()[-1] or None,
+            # "".split() is [], so [-1] raised IndexError on any machine without
+            # the ollama CLI. Passed on Discovery where it is installed and failed
+            # on laptops and CI, which is the worst way round for a bug to sit.
+            "ollama_client": _last_token(_run(["ollama", "--version"])),
             "chromadb": _package_version("chromadb"),
             "ollama_py": _package_version("ollama"),
         },

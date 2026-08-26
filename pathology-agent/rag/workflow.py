@@ -134,12 +134,32 @@ def _direction(line: str, path: str) -> str:
     return "mentions"
 
 
-def scan_corpus(root: str) -> Dict[str, List[FileRef]]:
+def _skip_dirs() -> tuple:
+    """Directories the tracer must not descend into.
+
+    Read from LAB_RAG_SKIP_DIRS, the same variable that tells the indexer what
+    to leave out of the vector store, so one setting governs both. The tracer
+    reaches the filesystem directly rather than through the index, so without
+    this it is the one tool that can still surface an excluded path.
+
+    Only paths are at risk here, not contents: scan_corpus already refuses to
+    open anything outside SOURCE_EXTENSIONS. But on a real corpus a path is
+    enough, because directories like compare_v2/469506_RGB.png carry accession
+    numbers in the name itself.
+    """
+    raw = os.environ.get("LAB_RAG_SKIP_DIRS") or ""
+    return tuple(d.strip() for d in raw.split(",") if d.strip())
+
+
+def scan_corpus(root: str, skip_dirs: Optional[Sequence[str]] = None) -> Dict[str, List[FileRef]]:
     """Map each source file -> the file references it contains."""
     root = os.path.abspath(root)
+    denied = tuple(skip_dirs) if skip_dirs is not None else _skip_dirs()
     graph: Dict[str, List[FileRef]] = {}
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        dirnames[:] = [
+            d for d in dirnames if not d.startswith(".") and d not in denied
+        ]
         for name in sorted(filenames):
             if os.path.splitext(name)[1].lower() not in SOURCE_EXTENSIONS:
                 continue
@@ -184,13 +204,14 @@ def trace(
     target: str,
     *,
     max_depth: int = 5,
+    skip_dirs: Optional[Sequence[str]] = None,
 ) -> Workflow:
     """Walk backwards from `target` to the chain of steps that produced it.
 
     Purely structural. Every step corresponds to a real file containing a real
     line that references the artifact — nothing is inferred by a model.
     """
-    graph = scan_corpus(root)
+    graph = scan_corpus(root, skip_dirs=skip_dirs)
     corpus_files = set(graph)
 
     workflow = Workflow(target=target)
