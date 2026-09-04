@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 460" font-family="Georgia, 'Times New Roman', serif">
+  <rect width="760" height="460" fill="#ffffff"/>
+  <text x="380" y="34" text-anchor="middle" font-size="21" font-weight="bold" fill="#111">Why hybrid beats either search alone</text>
+  <text x="380" y="56" text-anchor="middle" font-size="13" fill="#555">Each method fails on different questions (49-file corpus, Top-5). Green = found the right file.</text>
+
+  <!-- column headers -->
+  <text x="250" y="96" text-anchor="middle" font-size="14" font-weight="bold" fill="#01693E">Semantic</text>
+  <text x="250" y="112" text-anchor="middle" font-size="11" fill="#777">22 / 25</text>
+  <text x="410" y="96" text-anchor="middle" font-size="14" font-weight="bold" fill="#01693E">Keyword</text>
+  <text x="410" y="112" text-anchor="middle" font-size="11" fill="#777">23 / 25</text>
+  <text x="590" y="96" text-anchor="middle" font-size="14" font-weight="bold" fill="#01693E">Hybrid</text>
+  <text x="590" y="112" text-anchor="middle" font-size="11" fill="#777">24 / 25</text>
+
+  <!-- row label -->
+  <text x="120" y="150" font-size="12" fill="#333" font-weight="bold">The 3 hard questions:</text>
+
+  <!-- Rows: loc-008, loc-009, com-002, rep-007 -->
+  <!-- helper: filled circle = hit (green), open = miss (red) -->
+  <!-- Row 1: loc-008 -->
+  <text x="20" y="185" font-size="12" fill="#333">loc-008 · find set_rgb_stats.py</text>
+  <circle cx="250" cy="181" r="11" fill="#c0392b"/><text x="250" y="185" text-anchor="middle" font-size="12" fill="#fff">✗</text>
+  <circle cx="410" cy="181" r="11" fill="#01693E"/><text x="410" y="185" text-anchor="middle" font-size="12" fill="#fff">✓</text>
+  <circle cx="590" cy="181" r="11" fill="#01693E"/><text x="590" y="185" text-anchor="middle" font-size="12" fill="#fff">✓</text>
+  <text x="640" y="185" font-size="10" fill="#888">keyword saves it</text>
+
+  <!-- Row 2: loc-009 -->
+  <text x="20" y="225" font-size="12" fill="#333">loc-009 · compare_detectors.py</text>
+  <circle cx="250" cy="221" r="11" fill="#c0392b"/><text x="250" y="225" text-anchor="middle" font-size="12" fill="#fff">✗</text>
+  <circle cx="410" cy="221" r="11" fill="#01693E"/><text x="410" y="225" text-anchor="middle" font-size="12" fill="#fff">✓</text>
+  <circle cx="590" cy="221" r="11" fill="#01693E"/><text x="590" y="225" text-anchor="middle" font-size="12" fill="#fff">✓</text>
+  <text x="640" y="225" font-size="10" fill="#888">keyword saves it</text>
+
+  <!-- Row 3: com-002 -->
+  <text x="20" y="265" font-size="12" fill="#333">com-002 · float32 vs bfloat16</text>
+  <circle cx="250" cy="261" r="11" fill="#01693E"/><text x="250" y="265" text-anchor="middle" font-size="12" fill="#fff">✓</text>
+  <circle cx="410" cy="261" r="11" fill="#c0392b"/><text x="410" y="265" text-anchor="middle" font-size="12" fill="#fff">✗</text>
+  <circle cx="590" cy="261" r="11" fill="#01693E"/><text x="590" y="265" text-anchor="middle" font-size="12" fill="#fff">✓</text>
+  <text x="640" y="265" font-size="10" fill="#888">semantic saves it</text>
+
+  <!-- Row 4: rep-007 -->
+  <text x="20" y="305" font-size="12" fill="#333">rep-007 · flagged bad question</text>
+  <circle cx="250" cy="301" r="11" fill="#c0392b"/><text x="250" y="305" text-anchor="middle" font-size="12" fill="#fff">✗</text>
+  <circle cx="410" cy="301" r="11" fill="#c0392b"/><text x="410" y="305" text-anchor="middle" font-size="12" fill="#fff">✗</text>
+  <circle cx="590" cy="301" r="11" fill="#c0392b"/><text x="590" y="305" text-anchor="middle" font-size="12" fill="#fff">✗</text>
+  <text x="640" y="305" font-size="10" fill="#888">both miss</text>
+
+  <line x1="20" y1="330" x2="740" y2="330" stroke="#ddd" stroke-width="1"/>
+  <text x="380" y="365" text-anchor="middle" font-size="14" fill="#111" font-weight="bold">Semantic and keyword each miss ~3, but rarely the SAME question.</text>
+  <text x="380" y="390" text-anchor="middle" font-size="14" fill="#111">Merging their ranked lists recovers every miss except the bad question &#8594; 24/25 (96%).</text>
+  <text x="380" y="424" text-anchor="middle" font-size="12" fill="#555" font-style="italic">Hybrid does not average or choose — it sums both searches' rank-scores, so either one can rescue a file.</text>
+</svg>
